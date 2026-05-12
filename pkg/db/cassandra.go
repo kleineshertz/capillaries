@@ -132,7 +132,7 @@ func checkIfAmazonKeyspaces(cqlSession *gocql.Session) (bool, error) {
 	checkMcsKsQuery := "SELECT * FROM system_schema.keyspaces where keyspace_name='system_schema_mcs'"
 	rows, ksCheckErr := cqlSession.Query(checkMcsKsQuery).Iter().SliceMap()
 	if ksCheckErr != nil {
-		return false, WrapDbErrorWithQuery("failed to check system_schema_mcs keyspace presense", checkMcsKsQuery, ksCheckErr)
+		return false, WrapDbErrorWithQuery("failed to check system_schema_mcs keyspace presence", checkMcsKsQuery, ksCheckErr)
 	}
 	if len(rows) == 0 {
 		// This is not Amazon Keyspaces

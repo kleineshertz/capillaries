@@ -623,7 +623,7 @@ func (h *UrlHandler) ksStartRun(w http.ResponseWriter, r *http.Request) {
 	}
 	defer mqProducer.Close()
 
-	h.L.Info("start runing %s, mq connect took %.2fs", keyspace, time.Since(amqpStartTime).Seconds())
+	h.L.Info("start running %s, mq connect took %.2fs", keyspace, time.Since(amqpStartTime).Seconds())
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
