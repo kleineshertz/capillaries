@@ -192,7 +192,7 @@ func stopRun(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 		return 1
 	}
 
-	err = api.StopRun(logger, cqlSession, *keyspace, int16(runId), "stopped by toolbelt")
+	err = api.StopRun(cqlSession, *keyspace, int16(runId), "stopped by toolbelt")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
@@ -247,7 +247,7 @@ func getNodeHistory(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 		return 1
 	}
 
-	nodes, err := api.GetNodeHistoryForRuns(logger, cqlSession, *keyspace, runIds)
+	nodes, err := api.GetNodeHistoryForRuns(cqlSession, *keyspace, runIds)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
@@ -286,7 +286,7 @@ func getBatchHistory(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 		return 1
 	}
 
-	runs, err := api.GetBatchHistoryForRunAndNode(logger, cqlSession, *keyspace, int16(runId), *nodeNameString)
+	runs, err := api.GetBatchHistoryForRunAndNode(cqlSession, *keyspace, int16(runId), *nodeNameString)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1
@@ -352,7 +352,7 @@ func getRunStatusDiagram(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 		return 1
 	}
 
-	nodes, err := api.GetNodeHistoryForRuns(logger, cqlSession, *keyspace, []int16{int16(runId)})
+	nodes, err := api.GetNodeHistoryForRuns(cqlSession, *keyspace, []int16{int16(runId)})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		return 1

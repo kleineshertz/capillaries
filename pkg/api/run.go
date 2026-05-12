@@ -20,14 +20,10 @@ import (
 )
 
 // Used by Webapi and Toolbelt (stop_run command)
-func StopRun(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runId int16, comment string) error {
-	logger.PushF("api.StopRun")
-	defer logger.PopF()
-
+func StopRun(cqlSession gocqlshims.Session, keyspace string, runId int16, comment string) error {
 	if err := checkKeyspaceNameAllowed(keyspace); err != nil {
 		return err
 	}
-
 	return wfdb.SetRunStatus(cqlSession, keyspace, runId, wfmodel.RunStop, comment)
 }
 

@@ -98,7 +98,7 @@ func pickAccessControlAllowOrigin(wc *env.CapiMqBrokerConfig, r *http.Request) s
 }
 
 func WriteApiError(logger *l.CapiLogger, wc *env.CapiMqBrokerConfig, r *http.Request, w http.ResponseWriter, urlPath string, err error, httpStatus int) {
-	logger.PushF("WriteApiError")
+	logger.PushF("mq.WriteApiError")
 	defer logger.PopF()
 
 	ApiErrorHitCounter.Inc()
@@ -109,7 +109,7 @@ func WriteApiError(logger *l.CapiLogger, wc *env.CapiMqBrokerConfig, r *http.Req
 }
 
 func WriteApiDatalessSuccess(logger *l.CapiLogger, wc *env.CapiMqBrokerConfig, r *http.Request, w http.ResponseWriter) {
-	logger.PushF("WriteApiDatalessSuccess")
+	logger.PushF("mq.WriteApiDatalessSuccess")
 	defer logger.PopF()
 
 	ApiSuccessHitCounter.Inc()
@@ -120,7 +120,7 @@ func WriteApiDatalessSuccess(logger *l.CapiLogger, wc *env.CapiMqBrokerConfig, r
 }
 
 func WriteApiDataSuccess[T capimq.CapimqResultType](logger *l.CapiLogger, wc *env.CapiMqBrokerConfig, r *http.Request, w http.ResponseWriter, data T) {
-	logger.PushF("WriteApiDataSuccess")
+	logger.PushF("mq.WriteApiDataSuccess")
 	defer logger.PopF()
 
 	ApiSuccessHitCounter.Inc()

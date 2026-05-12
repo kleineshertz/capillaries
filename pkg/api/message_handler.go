@@ -81,7 +81,7 @@ func checkDependencyNodesReady(logger *l.CapiLogger, pCtx *ctx.MessageProcessing
 	depNodeNames = depNodeNames[:depNodeCount]
 
 	// { nodeReader: [{run1, RunComplete, NodeSuccess}], nodeLookup: [{run2, RunStopped, NodeSuccess}, {run3, RunComplete, NodeSuccess}]
-	nodeRunStatusMap, err := wfdb.BuildDependencyNodeRunStatusMap(logger, pCtx, depNodeNames)
+	nodeRunStatusMap, err := wfdb.BuildDependencyNodeRunStatusMap(pCtx, depNodeNames)
 	if err != nil {
 		return sc.NodeNone, 0, 0, -1, -1, err
 	}
@@ -138,7 +138,7 @@ func checkDependencyNodesReady(logger *l.CapiLogger, pCtx *ctx.MessageProcessing
 }
 
 func updateNodeStatusFromBatches(logger *l.CapiLogger, pCtx *ctx.MessageProcessingContext) (wfmodel.NodeBatchStatusType, error) {
-	logger.PushF("wf.updateNodeStatusFromBatches")
+	logger.PushF("api.updateNodeStatusFromBatches")
 	defer logger.PopF()
 
 	// Check all batches for this run/node, mark node complete if needed
@@ -179,10 +179,7 @@ func updateNodeStatusFromBatches(logger *l.CapiLogger, pCtx *ctx.MessageProcessi
 	return totalNodeStatus, nil
 }
 
-func updateRunStatusFromNodes(logger *l.CapiLogger, pCtx *ctx.MessageProcessingContext) error {
-	logger.PushF("wf.updateRunStatusFromNodes")
-	defer logger.PopF()
-
+func updateRunStatusFromNodes(pCtx *ctx.MessageProcessingContext) error {
 	// Let's see if this run is complete, get affected nodes for this run
 	runPropertiesFields := []string{"run_id", "affected_nodes"}
 	runPropsRow, err := wfdb.GetRunProperties(pCtx.CqlSession, pCtx.Msg.DataKeyspace, pCtx.Msg.RunId, runPropertiesFields)
@@ -220,7 +217,7 @@ func updateRunStatusFromNodes(logger *l.CapiLogger, pCtx *ctx.MessageProcessingC
 }
 
 func refreshNodeAndRunStatus(logger *l.CapiLogger, pCtx *ctx.MessageProcessingContext) error {
-	logger.PushF("wf.refreshNodeAndRunStatus")
+	logger.PushF("api.refreshNodeAndRunStatus")
 	defer logger.PopF()
 
 	_, err := updateNodeStatusFromBatches(logger, pCtx)
@@ -232,7 +229,7 @@ func refreshNodeAndRunStatus(logger *l.CapiLogger, pCtx *ctx.MessageProcessingCo
 	// Ideally, we should run the code below only if isApplied signaled something changed. But, there is a possibility
 	// that on the previous attempt, node status was updated and the daemon crashed right after that.
 	// We need to pick it up from there and refresh run status anyways.
-	err = updateRunStatusFromNodes(logger, pCtx)
+	err = updateRunStatusFromNodes(pCtx)
 	if err != nil {
 		logger.ErrorCtx(pCtx, "cannot refresh run status: %s", err.Error())
 		return err

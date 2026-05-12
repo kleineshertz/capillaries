@@ -84,7 +84,7 @@ func pickAccessControlAllowOrigin(wc *env.WebapiConfig, r *http.Request) string 
 }
 
 func WriteApiError(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, w http.ResponseWriter, urlPath string, err error, httpStatus int) {
-	logger.PushF("WriteApiError")
+	logger.PushF("webapi.WriteApiError")
 	defer logger.PopF()
 
 	w.Header().Set("Access-Control-Allow-Origin", pickAccessControlAllowOrigin(wc, r))
@@ -98,7 +98,7 @@ func WriteApiError(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, 
 }
 
 func WriteApiSuccess(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, w http.ResponseWriter, data any) {
-	logger.PushF("WriteApiSuccess")
+	logger.PushF("webapi.WriteApiSuccess")
 	defer logger.PopF()
 
 	logger.Debug("%s: OK", r.URL.Path)
@@ -239,7 +239,7 @@ func (h *UrlHandler) ksMatrix(w http.ResponseWriter, r *http.Request) {
 	defer cqlSession.Close()
 
 	// Retrieve all runs that happened in this ks and find their current statuses
-	runLifespanMap, err := api.HarvestRunLifespans(h.L, cqlSession, keyspace, []int16{})
+	runLifespanMap, err := api.HarvestRunLifespans(cqlSession, keyspace, []int16{})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -264,7 +264,7 @@ func (h *UrlHandler) ksMatrix(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Retrieve all node events for this ks, for all runs
-	sortedNodeEvents, err := api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{})
+	sortedNodeEvents, err := api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -375,7 +375,7 @@ func getRunProps(cqlSession gocqlshims.Session, keyspace string, runId int16, ru
 	return runProps, nil
 }
 
-func getRunPropsAndLifespans(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runId int16) (*wfmodel.RunProperties, *wfmodel.RunLifespan, error) {
+func getRunPropsAndLifespans(cqlSession gocqlshims.Session, keyspace string, runId int16) (*wfmodel.RunProperties, *wfmodel.RunLifespan, error) {
 
 	// Static run props
 
@@ -386,7 +386,7 @@ func getRunPropsAndLifespans(logger *l.CapiLogger, cqlSession gocqlshims.Session
 
 	// Run status
 
-	runLifeSpans, err := api.HarvestRunLifespans(logger, cqlSession, keyspace, []int16{int16(runId)})
+	runLifeSpans, err := api.HarvestRunLifespans(cqlSession, keyspace, []int16{int16(runId)})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,7 +429,7 @@ func (h *UrlHandler) ksRunNodeBatchHistory(w http.ResponseWriter, r *http.Reques
 	}
 
 	result := RunNodeBatchesInfo{}
-	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(h.L, cqlSession, keyspace, int16(runId))
+	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(cqlSession, keyspace, int16(runId))
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -443,7 +443,7 @@ func (h *UrlHandler) ksRunNodeBatchHistory(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result.RunNodeBatchHistory, err = api.GetBatchHistoryForRunAndNode(h.L, cqlSession, keyspace, int16(runId), nodeName)
+	result.RunNodeBatchHistory, err = api.GetBatchHistoryForRunAndNode(cqlSession, keyspace, int16(runId), nodeName)
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -485,7 +485,7 @@ func (h *UrlHandler) ksRunNodeHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := RunNodesInfo{}
-	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(h.L, cqlSession, keyspace, int16(runId))
+	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(cqlSession, keyspace, int16(runId))
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -493,7 +493,7 @@ func (h *UrlHandler) ksRunNodeHistory(w http.ResponseWriter, r *http.Request) {
 
 	// Node history
 
-	result.RunNodeHistory, err = api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{int16(runId)})
+	result.RunNodeHistory, err = api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{int16(runId)})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -557,7 +557,7 @@ func (h *UrlHandler) ksRunViz(w http.ResponseWriter, r *http.Request) {
 	showFields := true
 	if isStatus {
 		nodeColorMap = map[string]int32{}
-		sortedNodeEvents, err := api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{int16(runId)})
+		sortedNodeEvents, err := api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{int16(runId)})
 		if err != nil {
 			WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		}
@@ -692,7 +692,7 @@ func (h *UrlHandler) ksStopRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = api.StopRun(h.L, cqlSession, keyspace, int16(runId), stopRunInfo.Comment); err != nil {
+	if err = api.StopRun(cqlSession, keyspace, int16(runId), stopRunInfo.Comment); err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
 	}

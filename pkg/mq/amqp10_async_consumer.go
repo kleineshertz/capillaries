@@ -263,7 +263,7 @@ func (dc *Amqp10AsyncConsumer) acknowledgerAckRetry(logger *l.CapiLogger, token 
 }
 
 func (dc *Amqp10AsyncConsumer) acknowledgerWorker(logger *l.CapiLogger, acknowledgerChannel chan AknowledgerToken) {
-	logger.PushF("Amqp10AsyncConsumer.aknowledgerWorker")
+	logger.PushF("Amqp10AsyncConsumer.acknowledgerWorker")
 	defer logger.Close()
 
 	dc.acknowledger.done = make(chan bool, 1)
