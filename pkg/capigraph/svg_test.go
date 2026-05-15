@@ -1118,18 +1118,27 @@ func TestReadmeCustomBackground(t *testing.T) {
 			dur="2s" repeatCount="indefinite" calcMode="spline"/>
 	</rect>
 </pattern>
-<radialGradient id="redGradient" cx="50%" cy="50%" r="70%">
-	<stop offset="0%" stop-color="red">
-	<animate attributeName="stop-color" values="#ec0000;#ecca00;#ec0000" dur="1s" repeatCount="indefinite" />
-	<animate attributeName="offset" values="0%;50%;0%" dur="1s" repeatCount="indefinite" />
-	</stop>
-	<stop offset="100%" stop-color="#ecca00"></stop>
-</radialGradient>
+<pattern id="redSignal" patternUnits="userSpaceOnUse" width="200" height="200" x="75" y="-5">
+  <circle cx="50" cy="50" r="15" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite"></animate>
+  </circle>
+  
+  <circle cx="50" cy="50" r="0" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" begin="0.75s" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite" begin="0.75s"></animate>
+  </circle>
+  
+  <circle cx="50" cy="50" r="0" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" begin="1.5s" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite" begin="1.5s"></animate>
+  </circle>
+</pattern>
 `
 	cssOverrides := `
 .diagonal-progress-background {fill:url(#diagonalBlueLines)}
 .top-progress-background {fill:url(#topProgressBar)}
-.failed-background {fill:url(#redGradient)}
+.failed-background {fill:url(#redSignal)}
 `
 
 	var testNodeDefsOneSecondary = []NodeDef{

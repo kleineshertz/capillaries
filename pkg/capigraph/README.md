@@ -1,5 +1,5 @@
 Capigraph is a Go library, it started as part of the [Capillaries](https://github.com/capillariesio/capillaries) project, now it's a spin-off.
-It is pretty opinionated and it is used by Capillaries to draw process diagrams in Capillaries WebUI. It generates SVG diagrams from definitions in Go programs. It was designed to visualize a pretty specific class of diagrams, see details and examples below. If this is your kind of diagrams - congratulations, otherwise - sorry.
+It is pretty opinionated and it is used by Capillaries to draw data processing diagrams in Capillaries WebUI. It generates SVG diagrams from definitions in Go programs. It was designed to visualize a pretty specific class of diagrams - data processing DAGs, see details and examples below.
 
 ## Highlights and shortcomings
 
@@ -19,7 +19,7 @@ The good:
 The bad:
 - Secondary edges can overlap with nodes and edge labels (this is why nodes and edge labels are semi-transparent, unless custom background is 100% opaque), and intersect with other edges
 - Limited font support: Arial, Courier (monospace support is compulsory!), Verdana
-- Limited character width handling, supported Unicode blocks: Basic Latin, Latin-1 Supplement, Latin Extended-A, Latin Extended-B, Greek and Coptic, Cyrillic (fallback character is 'X')
+- Limited character width handling, supported Unicode blocks: Basic Latin, Latin-1 Supplement, Latin Extended-A, Latin Extended-B, Greek and Coptic, Cyrillic; fallback character is 'X'
 
 The ugly:
 - Edge labels can overlap with each other (play with font size and node widths to mitigate this)
@@ -59,7 +59,7 @@ func TestReadmeMonochromeDiamond(t *testing.T) {
 
 ![](./doc/example-monochrome-diamond.svg)
 
-### Nodes colored by root and icons
+### Icons, nodes colored by root
 
 ```
 func TestReadmeRootColors(t *testing.T) {
@@ -190,18 +190,27 @@ func TestReadmeCustomBackground(t *testing.T) {
 			dur="2s" repeatCount="indefinite" calcMode="spline"/>
 	</rect>
 </pattern>
-<radialGradient id="redGradient" cx="50%" cy="50%" r="70%">
-	<stop offset="0%" stop-color="red">
-	<animate attributeName="stop-color" values="#ec0000;#ecca00;#ec0000" dur="1s" repeatCount="indefinite" />
-	<animate attributeName="offset" values="0%;50%;0%" dur="1s" repeatCount="indefinite" />
-	</stop>
-	<stop offset="100%" stop-color="#ecca00"></stop>
-</radialGradient>
+<pattern id="redSignal" patternUnits="userSpaceOnUse" width="200" height="200" x="75" y="-5">
+  <circle cx="50" cy="50" r="15" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite"></animate>
+  </circle>
+  
+  <circle cx="50" cy="50" r="0" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" begin="0.75s" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite" begin="0.75s"></animate>
+  </circle>
+  
+  <circle cx="50" cy="50" r="0" fill-opacity="0" stroke="red" stroke-width="4px" stroke-opacity="1">
+    <animate attributeName="r" from="0" to="25" dur="3s" repeatCount="indefinite" begin="1.5s" />
+    <animate attributeName="stroke-opacity" from="1" to="0" dur="3s" repeatCount="indefinite" begin="1.5s"></animate>
+  </circle>
+</pattern>
 `
 	cssOverrides := `
 .diagonal-progress-background {fill:url(#diagonalBlueLines)}
 .top-progress-background {fill:url(#topProgressBar)}
-.failed-background {fill:url(#redGradient)}
+.failed-background {fill:url(#redSignal)}
 `
 
 	var testNodeDefsOneSecondary = []NodeDef{
@@ -262,6 +271,12 @@ A. No.
 Q. Any plans to come up with a diagram definition language like DOT language for Graphviz?
 
 A. No. But it should not be hard to create a Go tool that reads diagram definitions from files and generates diagrams.
+
+
+Q. Why should I choose Capigraph over Graphviz?
+
+A. No calls to a C binary from your Go program. More deterministic node layout.   
+
 
 [MIT License](LICENSE)
 
