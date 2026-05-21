@@ -3,7 +3,7 @@ WORKDIR /usr/src/capillaries
 ADD go.mod go.sum ./
 ADD ./pkg ./pkg
 RUN go mod download && go mod verify
-RUN CGO_ENABLED=0 go build -o /usr/local/bin/capidaemon /usr/src/capillaries/pkg/exe/daemon
+RUN CGO_ENABLED=0 go build -o /usr/local/bin/capidaemon -ldflags="-s -w -X main.version=docker-$(date -u +'%Y-%m-%dT%H:%M:%SZ')" /usr/src/capillaries/pkg/exe/daemon
 
 FROM python:3.10-alpine
 # FROM gcr.io/distroless/python3-debian12 no pip

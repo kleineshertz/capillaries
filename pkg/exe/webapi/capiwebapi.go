@@ -88,6 +88,8 @@ func WriteApiError(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, 
 	defer logger.PopF()
 
 	w.Header().Set("Access-Control-Allow-Origin", pickAccessControlAllowOrigin(wc, r))
+	w.Header().Set("Access-Control-Expose-Headers", WebapiVersionHeader)
+	w.Header().Set(WebapiVersionHeader, version)
 	logger.Error("cannot process %s: %s", urlPath, err.Error())
 	respJson, err := json.Marshal(ApiResponse{Error: err.Error()})
 	if err != nil {
@@ -104,6 +106,8 @@ func WriteApiSuccess(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request
 	logger.Debug("%s: OK", r.URL.Path)
 
 	w.Header().Set("Access-Control-Allow-Origin", pickAccessControlAllowOrigin(wc, r))
+	w.Header().Set("Access-Control-Expose-Headers", WebapiVersionHeader)
+	w.Header().Set(WebapiVersionHeader, version)
 	respJson, err := json.Marshal(ApiResponse{Data: data})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("cannot serialize success response: %s", err.Error()), http.StatusInternalServerError)
@@ -772,6 +776,8 @@ func (h UrlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var version string
 
+const WebapiVersionHeader string = "Webapi-Version"
+
 func main() {
 	initCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -783,7 +789,7 @@ func main() {
 
 	// Webapi (like toolbelt and daemon) requires custom proc def factory, otherwise it will not be able to start runs
 	envConfig.CustomProcessorDefFactoryInstance = &StandardWebapiProcessorDefFactory{}
-	logger, err := l.NewLoggerFromEnvConfig(envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(envConfig, version)
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}

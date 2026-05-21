@@ -3,7 +3,13 @@ import { defineConfig } from 'vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { execSync } from 'child_process'
 
-const gitHash = execSync('git describe --tags --always').toString().trim();
+let gitHash = '';
+try {
+	gitHash = execSync('git describe --tags --always').toString().trim();
+} catch (error){
+	// No git in the picture, use timestamp as version
+	gitHash = 'nogit-' + execSync('date -u +\'%Y-%m-%dT%H:%M:%SZ\'').toString().trim();
+}
 
 console.log('In .env file VITE_WEBAPI_URL=$CAPI_WEBAPI_URL:', process.env.CAPI_WEBAPI_URL);
 export default defineConfig({

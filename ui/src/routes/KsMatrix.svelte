@@ -25,6 +25,7 @@
 
 	let svgScriptViz = $state('');
 	let svgError = $state('');
+	let webapiVersion = $state('');
 	let webapiData = $state({ run_lifespans: [], nodes: [] });
 	let responseError = $state('');
 	var timer;
@@ -57,7 +58,10 @@
 		let url = webapiUrl() + '/ks/' + ks_name;
 		let method = 'GET';
 		fetch(new Request(url, { method: method }))
-			.then((response) => response.json())
+			.then((response) => {
+				webapiVersion = response.headers.get('Webapi-Version');
+				return response.json();
+			})
 			.then((responseJson) => {
 				handleResponse(responseJson, setWebapiData);
 				if (svgScriptViz == '' && webapiData.run_lifespans.length > 0) {
@@ -222,7 +226,7 @@
 	</div>
 {/snippet}
 
-<Breadcrumbs path_elements={breadcrumbsPathElements} />
+<Breadcrumbs path_elements={breadcrumbsPathElements} webapi_version={webapiVersion} />
 <p style="color:red;">{responseError}</p>
 
 <Tabs items={tabs} />

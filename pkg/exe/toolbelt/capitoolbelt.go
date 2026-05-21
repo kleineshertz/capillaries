@@ -763,7 +763,7 @@ func main() {
 		os.Exit(1)
 	}
 	envConfig.CustomProcessorDefFactoryInstance = &StandardToolbeltProcessorDefFactory{}
-	logger, err := l.NewLoggerFromEnvConfig(envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(envConfig, version)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)

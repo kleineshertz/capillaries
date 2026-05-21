@@ -40,14 +40,14 @@ func (l *CapiLogger) PopF() {
 	}
 }
 
-func NewLoggerFromEnvConfig(envConfig *env.EnvConfig) (*CapiLogger, error) {
+func NewLoggerFromEnvConfig(envConfig *env.EnvConfig, version string) (*CapiLogger, error) {
 	atomicTreadCounter := int64(0)
 	l := CapiLogger{AtomicThreadCounter: &atomicTreadCounter}
 	hostName, err := os.Hostname()
 	if err != nil {
 		return nil, fmt.Errorf("cannot get hostname: %s", err.Error())
 	}
-	l.ZapMachine = zap.String("i", fmt.Sprintf("%s/%s/%s", hostName, envConfig.HandlerExecutableType, time.Now().Format("01-02T15:04:05.000")))
+	l.ZapMachine = zap.String("i", fmt.Sprintf("%s/%s/%s/%s", envConfig.HandlerExecutableType, version, hostName, time.Now().Format("01-02T15:04:05.000")))
 	l.ZapThread = zap.Int64("t", 0)
 	l.ZapFunction = zap.String("f", "")
 

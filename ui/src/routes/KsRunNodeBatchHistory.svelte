@@ -17,6 +17,7 @@
 	const { ks_name, run_id, node_name } = $props();
 
 	let breadcrumbsPathElements = $state([]);
+	let webapiVersion = $state('');
 	let webapiData = $state({ run_props: {}, run_lifespan: {}, batch_history: [] });
 	let responseError = $state('');
 	var timer;
@@ -42,7 +43,10 @@
 			webapiUrl() + '/ks/' + ks_name + '/run/' + run_id + '/node/' + node_name + '/batch_history';
 		let method = 'GET';
 		fetch(new Request(url, { method: method }))
-			.then((response) => response.json())
+			.then((response) => {
+				webapiVersion = response.headers.get('Webapi-Version');
+				return response.json();
+			})
 			.then((responseJson) => {
 				handleResponse(responseJson, setWebapiData);
 				if (!isDestroyed) {
@@ -304,7 +308,7 @@
 	];
 </script>
 
-<Breadcrumbs path_elements={breadcrumbsPathElements} />
+<Breadcrumbs path_elements={breadcrumbsPathElements} webapi_version={webapiVersion} />
 <p style="color:red;">{responseError}</p>
 
 {#snippet tabRunInfo()}

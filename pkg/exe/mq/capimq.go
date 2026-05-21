@@ -362,7 +362,7 @@ func main() {
 		log.Fatalf("%s", err.Error())
 	}
 
-	logger, err := l.NewLoggerFromEnvConfig(envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(envConfig, version)
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}

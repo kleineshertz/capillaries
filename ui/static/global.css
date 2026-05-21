@@ -555,3 +555,20 @@ button {
 	height: auto;
 	line-height: 20px;
 }
+
+
+/*
+Non-skeleton extras
+*/
+
+
+.error-box {
+	color: #d93025;
+	background-color: #fce8e6;
+	padding: 10px;
+	border-radius: 4px;
+	border: 1px solid #d93025;	
+}
+.error-box:empty {
+	display:none;
+}

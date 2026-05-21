@@ -6,6 +6,7 @@
 	import { webapiUrl, handleResponse, ksMatrixLink } from '../Util.svelte';
 
 	let breadcrumbsPathElements = $state([]);
+	let webapiVersion = $state('');
 
 	let webapiData = $state([]);
 	let responseError = $state('');
@@ -27,12 +28,13 @@
 		let url = webapiUrl() + '/ks/';
 		let method = 'GET';
 		fetch(new Request(url, { method: method }))
-			.then((response) => response.json())
-			.then((responseJson) => {
+			.then((response) => {
+				webapiVersion = response.headers.get('Webapi-Version');
+				return response.json();
+			}).then((responseJson) => {
 				handleResponse(responseJson, setWebapiData);
 				if (!isDestroyed) timer = setTimeout(fetchData, 500);
-			})
-			.catch((error) => {
+			}).catch((error) => {
 				responseError =
 					'cannot fetch keyspaces data from Capillaries webapi at ' +
 					method +
@@ -75,9 +77,9 @@
 	}
 </script>
 
-<Breadcrumbs path_elements={breadcrumbsPathElements} />
+<Breadcrumbs path_elements={breadcrumbsPathElements} webapi_version={webapiVersion} />
 
-<p style="color:red;">{responseError}</p>
+<p class="error-box">{responseError}</p>
 <p style="color:red;">{dropResponseError}</p>
 
 <button

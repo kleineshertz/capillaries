@@ -1,5 +1,5 @@
 <script>
-	const { path_elements = [{ title: 'Empty breadcrumbs' }] } = $props();
+	let { path_elements = [{ title: 'Empty breadcrumbs' }], webapi_version = '' } = $props();
 </script>
 
 <div>
@@ -7,7 +7,7 @@
 		src="i/logo.svg"
 		style="width:20px;padding-right:15px;padding-bottom:10px;"
 		alt=""
-		title="Capillaries-UI {__GIT_HASH__}"
+		title="Capillaries-UI: {__GIT_HASH__}, Webapi: {webapi_version}"
 	/>
 	{#each path_elements as e, i}
 		{#if !!e.link}

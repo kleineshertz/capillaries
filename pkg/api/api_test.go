@@ -39,7 +39,7 @@ func noooooTestRun(t *testing.T) {
 	sc.ScriptDefCache = sc.NewScriptDefCache()
 	NodeDependencyReadynessCache = NewNodeDependencyReadynessCache()
 
-	logger, err := l.NewLoggerFromEnvConfig(&envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
 
 	mqProducer := mq.TestInmemProducer{}
