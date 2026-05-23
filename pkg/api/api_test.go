@@ -39,7 +39,7 @@ func noooooTestRun(t *testing.T) {
 	sc.ScriptDefCache = sc.NewScriptDefCache()
 	NodeDependencyReadynessCache = NewNodeDependencyReadynessCache()
 
-	logger, err := l.NewLoggerFromEnvConfig(&envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
 
 	mqProducer := mq.TestInmemProducer{}
@@ -76,7 +76,7 @@ func noooooTestRun(t *testing.T) {
 		runStatus = runHistory[len(runHistory)-1].Status
 		logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 
-		nodeHistory, err := GetNodeHistoryForRuns(logger, gocqlmemSession, "testkeyspace", []int16{int16(1)})
+		nodeHistory, err := GetNodeHistoryForRuns(gocqlmemSession, "testkeyspace", []int16{int16(1)})
 		assert.Nil(t, err)
 
 		newNodeRunStatusMap := map[string]wfmodel.NodeBatchStatusType{}

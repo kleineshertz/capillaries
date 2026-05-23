@@ -227,7 +227,7 @@ func TestTableInsert(t *testing.T) {
 			{"col2", PrimaryKeyClustering, gocql.TypeBigInt, ClusteringOrderDesc},
 			{"col3", PrimaryKeyNone, gocql.TypeBoolean, ClusteringOrderNone},
 		},
-		columnValues:            [][]any{[]any{}, []any{}, []any{}},
+		columnValues:            [][]any{{}, {}, {}},
 		columnDefMap:            map[string]int{"col1": 0, "col2": 1, "col3": 2},
 		origColIdxToStoreColIdx: []int{0, 1, 2},
 	}

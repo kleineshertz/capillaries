@@ -2,7 +2,6 @@ package api
 
 import (
 	"github.com/capillariesio/capillaries/pkg/gocqlshims"
-	"github.com/capillariesio/capillaries/pkg/l"
 	"github.com/capillariesio/capillaries/pkg/wfdb"
 	"github.com/capillariesio/capillaries/pkg/wfmodel"
 )
@@ -17,9 +16,7 @@ func GetRunHistory(cqlSession gocqlshims.Session, keyspace string) ([]*wfmodel.R
 }
 
 // Used by Webapi and Toolbelt (get_node_history, get_run_status_diagram commands) to retrieve each node status history for multiple runs (used by WebUI main screen and in integration tests)
-func GetNodeHistoryForRuns(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runIds []int16) ([]*wfmodel.NodeHistoryEvent, error) {
-	logger.PushF("api.GetNodeHistoryForRuns")
-	defer logger.PopF()
+func GetNodeHistoryForRuns(cqlSession gocqlshims.Session, keyspace string, runIds []int16) ([]*wfmodel.NodeHistoryEvent, error) {
 	rows, err := wfdb.GetNodeHistoryForRuns(cqlSession, keyspace, runIds, nil)
 	if err != nil {
 		return nil, err
@@ -28,9 +25,7 @@ func GetNodeHistoryForRuns(logger *l.CapiLogger, cqlSession gocqlshims.Session, 
 }
 
 // Used in Toolbelt (get_batch_history command)
-func GetBatchHistoryForRunAndNode(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runId int16, nodeName string) ([]*wfmodel.BatchHistoryEvent, error) {
-	logger.PushF("api.GetRunNodeBatchHistory")
-	defer logger.PopF()
+func GetBatchHistoryForRunAndNode(cqlSession gocqlshims.Session, keyspace string, runId int16, nodeName string) ([]*wfmodel.BatchHistoryEvent, error) {
 	rows, err := wfdb.GetAllBatchHistoryForRunAndNode(cqlSession, keyspace, runId, nodeName, wfmodel.BatchHistoryEventAllFields())
 	if err != nil {
 		return nil, err
@@ -39,19 +34,14 @@ func GetBatchHistoryForRunAndNode(logger *l.CapiLogger, cqlSession gocqlshims.Se
 }
 
 // Used by Webapi to retrieve all runs that happened in this keyspace and their current status, and by checkDependencyNodesReady
-func HarvestRunLifespans(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runIds []int16) (wfmodel.RunLifespanMap, error) {
-	logger.PushF("api.HarvestRunLifespans")
-	defer logger.PopF()
-
+func HarvestRunLifespans(cqlSession gocqlshims.Session, keyspace string, runIds []int16) (wfmodel.RunLifespanMap, error) {
 	rows, err := wfdb.GetRunHistory(cqlSession, keyspace, runIds)
 	if err != nil {
 		return nil, err
 	}
-
 	events, err := wfmodel.RunHistoryRowsToEvents(rows)
 	if err != nil {
 		return nil, err
 	}
-
 	return wfmodel.RunHistoryEventsToLifespanMap(events)
 }

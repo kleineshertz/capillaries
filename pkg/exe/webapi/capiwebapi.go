@@ -84,10 +84,12 @@ func pickAccessControlAllowOrigin(wc *env.WebapiConfig, r *http.Request) string 
 }
 
 func WriteApiError(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, w http.ResponseWriter, urlPath string, err error, httpStatus int) {
-	logger.PushF("WriteApiError")
+	logger.PushF("webapi.WriteApiError")
 	defer logger.PopF()
 
 	w.Header().Set("Access-Control-Allow-Origin", pickAccessControlAllowOrigin(wc, r))
+	w.Header().Set("Access-Control-Expose-Headers", WebapiVersionHeader)
+	w.Header().Set(WebapiVersionHeader, version)
 	logger.Error("cannot process %s: %s", urlPath, err.Error())
 	respJson, err := json.Marshal(ApiResponse{Error: err.Error()})
 	if err != nil {
@@ -98,12 +100,14 @@ func WriteApiError(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, 
 }
 
 func WriteApiSuccess(logger *l.CapiLogger, wc *env.WebapiConfig, r *http.Request, w http.ResponseWriter, data any) {
-	logger.PushF("WriteApiSuccess")
+	logger.PushF("webapi.WriteApiSuccess")
 	defer logger.PopF()
 
 	logger.Debug("%s: OK", r.URL.Path)
 
 	w.Header().Set("Access-Control-Allow-Origin", pickAccessControlAllowOrigin(wc, r))
+	w.Header().Set("Access-Control-Expose-Headers", WebapiVersionHeader)
+	w.Header().Set(WebapiVersionHeader, version)
 	respJson, err := json.Marshal(ApiResponse{Data: data})
 	if err != nil {
 		http.Error(w, fmt.Sprintf("cannot serialize success response: %s", err.Error()), http.StatusInternalServerError)
@@ -239,7 +243,7 @@ func (h *UrlHandler) ksMatrix(w http.ResponseWriter, r *http.Request) {
 	defer cqlSession.Close()
 
 	// Retrieve all runs that happened in this ks and find their current statuses
-	runLifespanMap, err := api.HarvestRunLifespans(h.L, cqlSession, keyspace, []int16{})
+	runLifespanMap, err := api.HarvestRunLifespans(cqlSession, keyspace, []int16{})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -264,7 +268,7 @@ func (h *UrlHandler) ksMatrix(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Retrieve all node events for this ks, for all runs
-	sortedNodeEvents, err := api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{})
+	sortedNodeEvents, err := api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -375,7 +379,7 @@ func getRunProps(cqlSession gocqlshims.Session, keyspace string, runId int16, ru
 	return runProps, nil
 }
 
-func getRunPropsAndLifespans(logger *l.CapiLogger, cqlSession gocqlshims.Session, keyspace string, runId int16) (*wfmodel.RunProperties, *wfmodel.RunLifespan, error) {
+func getRunPropsAndLifespans(cqlSession gocqlshims.Session, keyspace string, runId int16) (*wfmodel.RunProperties, *wfmodel.RunLifespan, error) {
 
 	// Static run props
 
@@ -386,7 +390,7 @@ func getRunPropsAndLifespans(logger *l.CapiLogger, cqlSession gocqlshims.Session
 
 	// Run status
 
-	runLifeSpans, err := api.HarvestRunLifespans(logger, cqlSession, keyspace, []int16{int16(runId)})
+	runLifeSpans, err := api.HarvestRunLifespans(cqlSession, keyspace, []int16{int16(runId)})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -429,7 +433,7 @@ func (h *UrlHandler) ksRunNodeBatchHistory(w http.ResponseWriter, r *http.Reques
 	}
 
 	result := RunNodeBatchesInfo{}
-	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(h.L, cqlSession, keyspace, int16(runId))
+	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(cqlSession, keyspace, int16(runId))
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -443,7 +447,7 @@ func (h *UrlHandler) ksRunNodeBatchHistory(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	result.RunNodeBatchHistory, err = api.GetBatchHistoryForRunAndNode(h.L, cqlSession, keyspace, int16(runId), nodeName)
+	result.RunNodeBatchHistory, err = api.GetBatchHistoryForRunAndNode(cqlSession, keyspace, int16(runId), nodeName)
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -485,7 +489,7 @@ func (h *UrlHandler) ksRunNodeHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := RunNodesInfo{}
-	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(h.L, cqlSession, keyspace, int16(runId))
+	result.RunProps, result.RunLs, err = getRunPropsAndLifespans(cqlSession, keyspace, int16(runId))
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -493,7 +497,7 @@ func (h *UrlHandler) ksRunNodeHistory(w http.ResponseWriter, r *http.Request) {
 
 	// Node history
 
-	result.RunNodeHistory, err = api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{int16(runId)})
+	result.RunNodeHistory, err = api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{int16(runId)})
 	if err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
@@ -557,7 +561,7 @@ func (h *UrlHandler) ksRunViz(w http.ResponseWriter, r *http.Request) {
 	showFields := true
 	if isStatus {
 		nodeColorMap = map[string]int32{}
-		sortedNodeEvents, err := api.GetNodeHistoryForRuns(h.L, cqlSession, keyspace, []int16{int16(runId)})
+		sortedNodeEvents, err := api.GetNodeHistoryForRuns(cqlSession, keyspace, []int16{int16(runId)})
 		if err != nil {
 			WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		}
@@ -623,7 +627,7 @@ func (h *UrlHandler) ksStartRun(w http.ResponseWriter, r *http.Request) {
 	}
 	defer mqProducer.Close()
 
-	h.L.Info("start runing %s, mq connect took %.2fs", keyspace, time.Since(amqpStartTime).Seconds())
+	h.L.Info("start running %s, mq connect took %.2fs", keyspace, time.Since(amqpStartTime).Seconds())
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -692,7 +696,7 @@ func (h *UrlHandler) ksStopRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = api.StopRun(h.L, cqlSession, keyspace, int16(runId), stopRunInfo.Comment); err != nil {
+	if err = api.StopRun(cqlSession, keyspace, int16(runId), stopRunInfo.Comment); err != nil {
 		WriteApiError(h.L, &h.Env.Webapi, r, w, r.URL.Path, err, http.StatusInternalServerError)
 		return
 	}
@@ -772,6 +776,8 @@ func (h UrlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 var version string
 
+const WebapiVersionHeader string = "Webapi-Version"
+
 func main() {
 	initCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -783,7 +789,7 @@ func main() {
 
 	// Webapi (like toolbelt and daemon) requires custom proc def factory, otherwise it will not be able to start runs
 	envConfig.CustomProcessorDefFactoryInstance = &StandardWebapiProcessorDefFactory{}
-	logger, err := l.NewLoggerFromEnvConfig(envConfig)
+	logger, err := l.NewLoggerFromEnvConfig(envConfig, version)
 	if err != nil {
 		log.Fatalf("%s", err.Error())
 	}

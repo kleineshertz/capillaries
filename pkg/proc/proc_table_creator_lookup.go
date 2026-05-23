@@ -442,7 +442,7 @@ func runCreateTableRelForBatch(envConfig *env.EnvConfig,
 				rightDataAttemptIdx := 0
 				for {
 					// We will keep resetting page state because we will keep shrinking rightRowidsToFind
-					// Let's keep uisng paging in case there are too many ids to retireve
+					// Let's keep uisng paging in case there are too many ids to retrieve
 					var rightPageState []byte
 					selectBatchStartTime := time.Now()
 					_, err = selectBatchFromDataTablePaged(logger,

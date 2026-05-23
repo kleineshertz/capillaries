@@ -251,23 +251,40 @@ resource "aws_eip" "natgw_public_ip" {
   }
 }
 
-resource "aws_nat_gateway" "natgw" {
-  allocation_id = aws_eip.natgw_public_ip.id
-  subnet_id     = aws_subnet.public_subnet.id
+# natgw only 
+# resource "aws_nat_gateway" "natgw" {
+#   allocation_id = aws_eip.natgw_public_ip.id
+#   subnet_id     = aws_subnet.public_subnet.id
 
-  tags = {
-    Name = "capillaries_natgw"
+#   tags = {
+#     Name = "capillaries_natgw"
+#   }
+#   depends_on = [aws_internet_gateway.igw]
+# }
+
+# fck-nat only
+module "fck-nat" {
+  source = "RaJiska/fck-nat/aws"
+
+  name      = "fck-nat-module"
+  vpc_id    = aws_vpc.main_vpc.id
+  subnet_id = aws_subnet.public_subnet.id
+  ha_mode   = true
+
+  update_route_tables = true
+  route_tables_ids = {
+    "private" = aws_route_table.private_subnet_rt_to_natgw.id
   }
-  depends_on = [aws_internet_gateway.igw]
 }
 
 resource "aws_route_table" "private_subnet_rt_to_natgw" {
  vpc_id = aws_vpc.main_vpc.id
- 
- route {
-   cidr_block = "0.0.0.0/0"
-   gateway_id = aws_nat_gateway.natgw.id
- }
+
+# natgw only 
+#  route {
+#    cidr_block = "0.0.0.0/0"
+#    gateway_id = aws_nat_gateway.natgw.id
+#  }
  
  tags = {
    Name = "capillaries_private_subnet_rt_to_natgw"
