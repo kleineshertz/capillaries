@@ -171,7 +171,7 @@ func startRun(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 	return 0
 }
 
-func stopRun(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
+func stopRun(envConfig *env.EnvConfig) int {
 	stopRunCmd := flag.NewFlagSet(CmdStopRun, flag.ExitOnError)
 	keyspace := stopRunCmd.String("keyspace", "", "Keyspace (session id)")
 	runIdString := stopRunCmd.String("run_id", "", "Run id")
@@ -226,7 +226,7 @@ func getRunHistory(envConfig *env.EnvConfig) int {
 	return 0
 }
 
-func getNodeHistory(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
+func getNodeHistory(envConfig *env.EnvConfig) int {
 	getNodeHistoryCmd := flag.NewFlagSet(CmdGetNodeHistory, flag.ExitOnError)
 	keyspace := getNodeHistoryCmd.String("keyspace", "", "Keyspace (session id)")
 	runIdsString := getNodeHistoryCmd.String("run_ids", "", "Limit results to specific run ids (optional), comma-separated list")
@@ -259,7 +259,7 @@ func getNodeHistory(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
 	return 0
 }
 
-func getBatchHistory(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
+func getBatchHistory(envConfig *env.EnvConfig) int {
 	getBatchHistoryCmd := flag.NewFlagSet(CmdGetBatchHistory, flag.ExitOnError)
 	keyspace := getBatchHistoryCmd.String("keyspace", "", "Keyspace (session id)")
 	runIdString := getBatchHistoryCmd.String("run_id", "", "Limit results to specific run id")
@@ -322,7 +322,7 @@ func getTableCql(envConfig *env.EnvConfig) int {
 	return 0
 }
 
-func getRunStatusDiagram(envConfig *env.EnvConfig, logger *l.CapiLogger) int {
+func getRunStatusDiagram(envConfig *env.EnvConfig) int {
 	getRunStatusDiagramCmd := flag.NewFlagSet(CmdGetRunStatusDiagram, flag.ExitOnError)
 	scriptFilePath := getRunStatusDiagramCmd.String("script_file", "", "Path to script file")
 	paramsFilePath := getRunStatusDiagramCmd.String("params_file", "", "Path to script parameters map file")
@@ -784,22 +784,22 @@ func main() {
 		os.Exit(startRun(envConfig, logger))
 
 	case CmdStopRun:
-		os.Exit(stopRun(envConfig, logger))
+		os.Exit(stopRun(envConfig))
 
 	case CmdGetRunHistory:
 		os.Exit(getRunHistory(envConfig))
 
 	case CmdGetNodeHistory:
-		os.Exit(getNodeHistory(envConfig, logger))
+		os.Exit(getNodeHistory(envConfig))
 
 	case CmdGetBatchHistory:
-		os.Exit(getBatchHistory(envConfig, logger))
+		os.Exit(getBatchHistory(envConfig))
 
 	case CmdGetTableCql:
 		os.Exit(getTableCql(envConfig))
 
 	case CmdGetRunStatusDiagram:
-		os.Exit(getRunStatusDiagram(envConfig, logger))
+		os.Exit(getRunStatusDiagram(envConfig))
 
 	case CmdDropKeyspace:
 		os.Exit(dropKeyspace(envConfig, logger))
