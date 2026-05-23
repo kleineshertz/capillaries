@@ -86,9 +86,6 @@ linters:
       - path: pkg\/exe\/toolbelt\/.+\.go
         text: use of `fmt.Print(|f|ln)` forbidden by pattern
         linters: [ forbidigo]
-      - path: pkg\/capigraph\/svg_test\.go
-        text: use of `fmt.Print(|f|ln)` forbidden by pattern
-        linters: [ forbidigo]
 
       - path: pkg\/gocqlmem\/.+\.go
         text: has (cognitive|cyclomatic) complexity

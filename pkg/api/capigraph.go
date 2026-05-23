@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/capillariesio/capillaries/pkg/capigraph"
+	"github.com/capillariesio/capigraph"
 	"github.com/capillariesio/capillaries/pkg/custom/pycalc"
 	"github.com/capillariesio/capillaries/pkg/custom/taganddenormalize"
 	"github.com/capillariesio/capillaries/pkg/sc"
