@@ -13,6 +13,7 @@ build/
 .terraform.lock.hcl
 terraform.tfstate
 terraform.tfstate.backup
+.terraform.tfstate.lock.info
 
 # Test binary, built with `go test -c`
 *.test
