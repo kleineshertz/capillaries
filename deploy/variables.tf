@@ -548,3 +548,33 @@ variable "BASTION_ALLOWED_IPS" {
 	type        = string
 	description = "Comma-separated list of IP addresses and cidr blocks allowed to access bastion from the outside"
 }
+
+variable "budget_name" {
+	type        = string
+	description = "Name of the AWS budget"
+	default     = "capillaries-monthly-budget"
+}
+
+variable "budget_amount" {
+	type        = string
+	description = "Monthly budget amount (number as string, e.g. \"100\")"
+	default     = "100"
+}
+
+variable "budget_unit" {
+	type        = string
+	description = "Currency unit for the budget"
+	default     = "USD"
+}
+
+variable "budget_threshold_percent" {
+	type        = number
+	description = "Threshold percent for notifications (e.g. 90)"
+	default     = 90
+}
+
+variable "budget_email" {
+	type        = string
+	description = "Email address to receive budget notifications"
+	default     = ""
+}
