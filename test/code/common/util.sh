@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# This is pretty static, set in variables.tf and rarely changes, no need to pass it from the outside
+EXTERNAL_WEBAPI_PORT=6544
+
 # Verify Capillaries are deployed somewhere at $BASTION_IP
 check_cloud_deployment()
 {
