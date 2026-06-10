@@ -92,7 +92,6 @@ export CAPILLARIES_AWS_TESTBUCKET=capillaries-testbucket
 
 # We need it to call WebAPI
 export BASTION_IP=your_bastion_ip_address
-export EXTERNAL_WEBAPI_PORT=6544
 
 # Remember UserAccessCapillariesTestbucket introduced in ../doc/s3.md ?
 source ~/UserAccessCapillariesTestbucket.rc
