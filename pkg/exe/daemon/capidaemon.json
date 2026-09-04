@@ -42,6 +42,10 @@
     "url":"http://localhost:7654",
     "heartbeat_interval": 1000
   },
+  "fetch_policy": {
+    "allowed_schemes": ["file", "http", "https", "s3"],
+    "allow_private_hosts": true
+  },
   "custom_processors": {
     "py_calc": {
       "python_interpreter_path": "python",

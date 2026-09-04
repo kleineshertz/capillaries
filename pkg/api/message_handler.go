@@ -16,6 +16,7 @@ import (
 	"github.com/capillariesio/capillaries/pkg/sc"
 	"github.com/capillariesio/capillaries/pkg/wfdb"
 	"github.com/capillariesio/capillaries/pkg/wfmodel"
+	"github.com/capillariesio/capillaries/pkg/xfer"
 	"go.uber.org/zap"
 )
 
@@ -238,10 +239,10 @@ func refreshNodeAndRunStatus(logger *l.CapiLogger, pCtx *ctx.MessageProcessingCo
 	return nil
 }
 
-func initCtxScript(logger *l.CapiLogger, pCtx *ctx.MessageProcessingContext, caPath string, privateKeys map[string]string, msg *wfmodel.Message, customProcFactory sc.CustomProcessorDefFactory, customProcSettings map[string]json.RawMessage) FurtherProcessingCmd {
+func initCtxScript(logger *l.CapiLogger, pCtx *ctx.MessageProcessingContext, fetchPolicy *xfer.FetchPolicy, caPath string, privateKeys map[string]string, msg *wfmodel.Message, customProcFactory sc.CustomProcessorDefFactory, customProcSettings map[string]json.RawMessage) FurtherProcessingCmd {
 	var initProblem sc.ScriptInitProblemType
 	var err error
-	pCtx.Script, initProblem, err = sc.NewScriptFromFiles(caPath, privateKeys, msg.ScriptURL, msg.ScriptParamsURL, customProcFactory, customProcSettings)
+	pCtx.Script, initProblem, err = sc.NewScriptFromFiles(fetchPolicy, caPath, privateKeys, msg.ScriptURL, msg.ScriptParamsURL, customProcFactory, customProcSettings)
 	if initProblem == sc.ScriptInitNoProblem {
 		return FurtherProcessingProceed
 	}
@@ -400,6 +401,16 @@ func checkDependencyNogoOrWait(logger *l.CapiLogger, pCtx *ctx.MessageProcessing
 }
 
 // Used by Daemon and Toolbelt
+// ProcessDataBatchMsg handles one batch message. The step ordering below is load-bearing:
+//   1. run-status check BEFORE loading the script - a stopped run must not be retried forever
+//      just because the script URL is temporarily unreachable.
+//   2. checkLastBatchStatus (dedup) BEFORE any processing - a redelivered message for an already
+//      completed batch must be acked without re-running it, or it duplicates data.
+//   3. SetBatchStatus(success) AFTER the work completes - moving it earlier makes a batch look done
+//      though nothing ran (silent data loss). The crash window after the work but before this
+//      SetBatchStatus is exactly what the rerun-cleanup delete (DeleteDataAndUniqueIndexesByBatchIdx)
+//      exists to clean up; the window between SetBatchStatus(success) and refreshNodeAndRunStatus
+//      self-heals because node/run status is re-derived by folding batch history.
 func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wfmodel.Message, heartbeatInterval int64, heartbeatCallback ctx.HeartbeatCallbackFunc) mq.AcknowledgerCmd {
 	logger.PushF("api.ProcessDataBatchMsg")
 	defer logger.PopF()
@@ -450,7 +461,7 @@ func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wf
 	}
 
 	// Script/params must be valid
-	furtherProcCmd = initCtxScript(logger, pCtx, envConfig.CaPath, envConfig.PrivateKeys, msg, envConfig.CustomProcessorDefFactoryInstance, envConfig.CustomProcessorsSettings)
+	furtherProcCmd = initCtxScript(logger, pCtx, &envConfig.FetchPolicy, envConfig.CaPath, envConfig.PrivateKeys, msg, envConfig.CustomProcessorDefFactoryInstance, envConfig.CustomProcessorsSettings)
 	switch furtherProcCmd {
 	case FurtherProcessingRetry:
 		return mq.AcknowledgerCmdRetry

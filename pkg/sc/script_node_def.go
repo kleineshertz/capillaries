@@ -402,6 +402,20 @@ func (node *ScriptNodeDef) GetUniqueIndexesFieldRefs() *FieldRefs {
 	return &fieldRefs
 }
 
+// GetTokenIntervalsByNumberOfBatches splits the full token space [MinInt64, MaxInt64] into
+// ExpectedBatchesTotal contiguous, non-overlapping intervals (last batch pinned to MaxInt64 to
+// absorb the integer-division remainder, so the union is exactly the whole space with no lost tokens).
+//
+// LOAD-BEARING: this must only be called on a node that has already been through Deserialize/initReader.
+// The N==1 early return means the division at "math.MaxInt64/ExpectedBatchesTotal" below is reached for
+// any other value, INCLUDING 0 (a zero-valued, never-deserialized TableReaderDef) - which would panic
+// with a divide-by-zero. It is safe today only because initReader normalizes 0 -> 1 and rejects <0 or
+// >MaxAcceptedBatchesByTableReader, and every node reaching the division has HasTableReader()==true.
+//
+// The "|| node.HasFileCreator() && ..." clause is intentionally kept but is effectively dead: file-creator
+// nodes (NodeTypeTableFile) are also table readers (see HasTableReader), so HasTableReader() already
+// short-circuits true for them. TableReader is a value type, so node.TableReader.ExpectedBatchesTotal is
+// never a nil deref regardless.
 func (node *ScriptNodeDef) GetTokenIntervalsByNumberOfBatches() ([][]int64, error) {
 	if node.HasTableReader() || node.HasFileCreator() && node.TableReader.ExpectedBatchesTotal > 1 {
 		if node.TableReader.ExpectedBatchesTotal == 1 {

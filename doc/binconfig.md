@@ -75,9 +75,25 @@ Proper `ca_path` setting is crucial for running HTTPS version of Capillaries [ta
 
 If ca_path is empty, Go uses the host's root CA set (/usr/ssl/certs etc).
 
+## fetch_policy
+
+This section allows checking script and script params URLs.
+
+### allowed_schemes
+
+Prevents Capillaries from trying to read arbitrary local files like `/etc/passwd` or cloud-based files like `http://169.254.169.254/latest/meta-data`.
+
+Default: ["file", "http", "https", "s3"] (very permissive, revisit before using in prod)
+
+### allow_private_hosts
+
+Prevents Capillaries from trying to read from private networks: http://10.0.0.1/
+
+Default: true (very permissive, revisit before using in prod)
+
 ## daemon
 
-This section is required by [Webapi](glossary.md#daemon) only.
+This section is required by [Daemon](glossary.md#daemon) only.
 
 ### thread_pool_size
 Number of threads processing messages consumed by the binary. Choose this setting according to your hardware environment specifics.

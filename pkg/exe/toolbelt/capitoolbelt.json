@@ -43,6 +43,10 @@
     "heartbeat_interval": 1000
   },
   "thread_pool_size": 1,
+  "fetch_policy": {
+    "allowed_schemes": ["file", "http", "https", "s3"],
+    "allow_private_hosts": true
+  },
   "custom_processors": {
     "py_calc": {
       "python_interpreter_path": "some_non_empty_python_path"

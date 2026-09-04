@@ -76,35 +76,35 @@ func valueToCqlParam(value any) any {
 }
 
 type queryBuilderColumnDefs struct {
-	Columns [256]string
-	Types   [256]string
-	Len     int
+	Columns []string
+	Types   []string
 }
 
 func (cd *queryBuilderColumnDefs) add(column string, fieldType evalcapi.TableFieldType) {
-	cd.Columns[cd.Len] = column
+	cd.Columns = append(cd.Columns, column)
+	var cqlType string
 	switch fieldType {
 	case evalcapi.FieldTypeInt:
-		cd.Types[cd.Len] = "BIGINT" // 64-bit int
+		cqlType = "BIGINT" // 64-bit int
 	case evalcapi.FieldTypeDecimal2:
-		cd.Types[cd.Len] = "DECIMAL"
+		cqlType = "DECIMAL"
 	case evalcapi.FieldTypeFloat:
-		cd.Types[cd.Len] = "DOUBLE"
+		cqlType = "DOUBLE"
 	case evalcapi.FieldTypeString:
-		cd.Types[cd.Len] = "TEXT"
+		cqlType = "TEXT"
 	case evalcapi.FieldTypeBool:
-		cd.Types[cd.Len] = "BOOLEAN"
+		cqlType = "BOOLEAN"
 	case evalcapi.FieldTypeDateTime:
-		cd.Types[cd.Len] = "TIMESTAMP" // Cassandra stores milliseconds since epoch
+		cqlType = "TIMESTAMP" // Cassandra stores milliseconds since epoch
 	default:
-		cd.Types[cd.Len] = fmt.Sprintf("UKNOWN_TYPE_%s", fieldType)
+		cqlType = fmt.Sprintf("UKNOWN_TYPE_%s", fieldType)
 	}
-	cd.Len++
+	cd.Types = append(cd.Types, cqlType)
 }
 
 type queryBuilderPreparedColumnData struct {
-	Columns      [256]string
-	Values       [256]any
+	Columns      []string
+	Values       []any
 	ColumnIdxMap map[string]int
 	ValueIdxMap  map[string]int
 }
@@ -114,7 +114,8 @@ func (cd *queryBuilderPreparedColumnData) addColumnName(column string) error {
 		return fmt.Errorf("cannot add same column %s to a prepared query twice: %v", column, cd.Columns)
 	}
 	curColCount := len(cd.ColumnIdxMap)
-	cd.Columns[curColCount] = column
+	cd.Columns = append(cd.Columns, column)
+	cd.Values = append(cd.Values, nil) // Grow Values in lockstep; addColumnValue sets it by index
 	cd.ColumnIdxMap[column] = curColCount
 	return nil
 }
@@ -129,20 +130,17 @@ func (cd *queryBuilderPreparedColumnData) addColumnValue(column string, value an
 }
 
 type queryBuilderColumnData struct {
-	Columns [256]string
-	Values  [256]string
-	Len     int
+	Columns []string
+	Values  []string
 }
 
 func (cd *queryBuilderColumnData) add(column string, value any, quotePolicy QuotePolicyType) {
-	cd.Values[cd.Len] = valueToString(value, quotePolicy)
-	cd.Columns[cd.Len] = column
-	cd.Len++
+	cd.Values = append(cd.Values, valueToString(value, quotePolicy))
+	cd.Columns = append(cd.Columns, column)
 }
 
 type queryBuilderConditions struct {
-	Items [256]string
-	Len   int
+	Items []string
 }
 
 func (cc *queryBuilderConditions) addInInt(column string, values []int64) {
@@ -150,8 +148,7 @@ func (cc *queryBuilderConditions) addInInt(column string, values []int64) {
 	for i, v := range values {
 		inValues[i] = fmt.Sprintf("%d", v)
 	}
-	cc.Items[cc.Len] = fmt.Sprintf("%s IN ( %s )", column, strings.Join(inValues, ", "))
-	cc.Len++
+	cc.Items = append(cc.Items, fmt.Sprintf("%s IN ( %s )", column, strings.Join(inValues, ", ")))
 }
 
 func (cc *queryBuilderConditions) addInInt16(column string, values []int16) {
@@ -159,22 +156,22 @@ func (cc *queryBuilderConditions) addInInt16(column string, values []int16) {
 	for i, v := range values {
 		inValues[i] = fmt.Sprintf("%d", v)
 	}
-	cc.Items[cc.Len] = fmt.Sprintf("%s IN ( %s )", column, strings.Join(inValues, ", "))
-	cc.Len++
+	cc.Items = append(cc.Items, fmt.Sprintf("%s IN ( %s )", column, strings.Join(inValues, ", ")))
 }
 
 func (cc *queryBuilderConditions) addInString(column string, values []string) {
-	cc.Items[cc.Len] = fmt.Sprintf("%s IN ( '%s' )", column, strings.Join(values, "', '"))
-	cc.Len++
+	escapedValues := make([]string, len(values))
+	for i, v := range values {
+		escapedValues[i] = strings.ReplaceAll(v, "'", "''")
+	}
+	cc.Items = append(cc.Items, fmt.Sprintf("%s IN ( '%s' )", column, strings.Join(escapedValues, "', '")))
 }
 
 func (cc *queryBuilderConditions) addSimple(column string, op string, value any) {
-	cc.Items[cc.Len] = fmt.Sprintf("%s %s %s", column, op, valueToString(value, LeaveQuoteAsIs))
-	cc.Len++
+	cc.Items = append(cc.Items, fmt.Sprintf("%s %s %s", column, op, valueToString(value, LeaveQuoteAsIs)))
 }
 func (cc *queryBuilderConditions) addSimpleForceUnquote(column string, op string, value any) {
-	cc.Items[cc.Len] = fmt.Sprintf("%s %s %s", column, op, valueToString(value, ForceUnquote))
-	cc.Len++
+	cc.Items = append(cc.Items, fmt.Sprintf("%s %s %s", column, op, valueToString(value, ForceUnquote)))
 }
 
 /*
@@ -320,8 +317,8 @@ func (qb *QueryBuilder) insertRunUnpreparedQuery(tableName string, runId int16, 
 		qb.FormattedKeyspace,
 		tableName,
 		RunIdSuffix(runId),
-		strings.Join(qb.ColumnData.Columns[:qb.ColumnData.Len], ", "),
-		strings.Join(qb.ColumnData.Values[:qb.ColumnData.Len], ", "),
+		strings.Join(qb.ColumnData.Columns, ", "),
+		strings.Join(qb.ColumnData.Values, ", "),
 		ifNotExistsStr)
 	if runId == 0 {
 		q = "INVALID runId: " + q
@@ -375,9 +372,9 @@ func (qb *QueryBuilder) SelectRun(tableName string, runId int16, columns []strin
 		qb.FormattedKeyspace,
 		tableName,
 		RunIdSuffix(runId))
-	if qb.Conditions.Len > 0 {
+	if len(qb.Conditions.Items) > 0 {
 		b.WriteString(" WHERE ")
-		b.WriteString(strings.Join(qb.Conditions.Items[:qb.Conditions.Len], " AND "))
+		b.WriteString(strings.Join(qb.Conditions.Items, " AND "))
 	}
 	if len(qb.OrderByColumns) > 0 {
 		fmt.Fprintf(&b, " ORDER BY %s ", strings.Join(qb.OrderByColumns, ","))
@@ -401,7 +398,7 @@ func (qb *QueryBuilder) DeleteRun(tableName string, runId int16) string {
 		qb.FormattedKeyspace,
 		tableName,
 		RunIdSuffix(runId),
-		strings.Join(qb.Conditions.Items[:qb.Conditions.Len], " AND "))
+		strings.Join(qb.Conditions.Items, " AND "))
 	if runId == 0 {
 		q = "DEV ERROR, INVALID runId: " + q
 	}
@@ -416,19 +413,19 @@ func (qb *QueryBuilder) Update(tableName string) string {
 	return qb.UpdateRun(tableName, RunIdForEmptyRun)
 }
 func (qb *QueryBuilder) UpdateRun(tableName string, runId int16) string {
-	var assignments [256]string
-	for i := 0; i < qb.ColumnData.Len; i++ {
+	assignments := make([]string, len(qb.ColumnData.Columns))
+	for i := 0; i < len(qb.ColumnData.Columns); i++ {
 		assignments[i] = fmt.Sprintf("%s = %s", qb.ColumnData.Columns[i], qb.ColumnData.Values[i])
 	}
 	q := fmt.Sprintf("UPDATE %s%s%s SET %s WHERE %s",
 		qb.FormattedKeyspace,
 		tableName,
 		RunIdSuffix(runId),
-		strings.Join(assignments[:qb.ColumnData.Len], ", "),
-		strings.Join(qb.Conditions.Items[:qb.Conditions.Len], " AND "))
+		strings.Join(assignments, ", "),
+		strings.Join(qb.Conditions.Items, " AND "))
 
-	if qb.IfConditions.Len > 0 {
-		q += " IF " + strings.Join(qb.IfConditions.Items[:qb.IfConditions.Len], " AND ")
+	if len(qb.IfConditions.Items) > 0 {
+		q += " IF " + strings.Join(qb.IfConditions.Items, " AND ")
 	}
 	if runId == 0 {
 		q = "INVALID runId: " + q
@@ -446,11 +443,11 @@ func (qb *QueryBuilder) CreateRun(tableName string, runId int16, ifNotExists IfN
 		b.WriteString("IF NOT EXISTS ")
 	}
 	fmt.Fprintf(&b, "%s%s%s ( ", qb.FormattedKeyspace, tableName, RunIdSuffix(runId))
-	for i := 0; i < qb.ColumnDefs.Len; i++ {
+	for i := 0; i < len(qb.ColumnDefs.Columns); i++ {
 		b.WriteString(qb.ColumnDefs.Columns[i])
 		b.WriteString(" ")
 		b.WriteString(qb.ColumnDefs.Types[i])
-		if i < qb.ColumnDefs.Len-1 {
+		if i < len(qb.ColumnDefs.Columns)-1 {
 			b.WriteString(", ")
 		}
 	}

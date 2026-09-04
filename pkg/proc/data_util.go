@@ -341,9 +341,9 @@ func deleteIdxRecordByKey(pCtx *ctx.MessageProcessingContext, idxName string, ke
 				(&cql.QueryBuilder{}).
 					Keyspace(pCtx.Msg.DataKeyspace).
 					Cond("key", "=", key).
-					DeleteRun(pCtx.CurrentScriptNode.TableCreator.Name, pCtx.Msg.RunId))
+					DeleteRun(idxName, pCtx.Msg.RunId))
 			sb.WriteString(";")
-			if (i+1)%MaxAmazonKeyspacesBatchLen == 0 || i == len(key)-1 {
+			if (i+1)%MaxAmazonKeyspacesBatchLen == 0 || i == len(keys)-1 {
 				batchStmt := "BEGIN UNLOGGED BATCH " + sb.String() + " APPLY BATCH"
 				if err := pCtx.CqlSession.Query(batchStmt).Exec(); err != nil {
 					return db.WrapDbErrorWithQuery("cannot delete from idx table", batchStmt, err)
@@ -361,4 +361,40 @@ func deleteIdxRecordByKey(pCtx *ctx.MessageProcessingContext, idxName string, ke
 		}
 	}
 	return nil
+}
+
+// selectDataRowidByIdxKey reads the rowid stored in the unique idx record for the given key and
+// checks whether the data row it points to actually exists. It is used to distinguish a genuine
+// distinct duplicate (idx + data both present, nothing to do) from an ORPHAN idx record left behind
+// by a crash between the idx insert and the data insert on a previous attempt.
+// Returns true if a live data row exists for the idx key, false if the idx record is missing or orphan.
+func selectDataRowidByIdxKey(pCtx *ctx.MessageProcessingContext, idxName string, dataTableName string, key string) (bool, error) {
+	// Read the rowid stored in the idx record for this key
+	idxQ := (&cql.QueryBuilder{}).
+		Keyspace(pCtx.Msg.DataKeyspace).
+		Cond("key", "=", key).
+		SelectRun(idxName, pCtx.Msg.RunId, []string{"rowid"})
+	idxRows, err := pCtx.CqlSession.Query(idxQ).Iter().SliceMap()
+	if err != nil {
+		return false, db.WrapDbErrorWithQuery("cannot read idx record rowid", idxQ, err)
+	}
+	if len(idxRows) == 0 {
+		// No idx record for this key anymore (it may have vanished between the failed insert and this read)
+		return false, nil
+	}
+	idxRowid, ok := idxRows[0]["rowid"].(int64)
+	if !ok {
+		return false, fmt.Errorf("cannot read idx record rowid for key %s: unexpected value %v", key, idxRows[0]["rowid"])
+	}
+
+	// Check whether the data row that idx record points to actually exists
+	dataQ := (&cql.QueryBuilder{}).
+		Keyspace(pCtx.Msg.DataKeyspace).
+		Cond("rowid", "=", idxRowid).
+		SelectRun(dataTableName, pCtx.Msg.RunId, []string{"rowid"})
+	dataRows, err := pCtx.CqlSession.Query(dataQ).Iter().SliceMap()
+	if err != nil {
+		return false, db.WrapDbErrorWithQuery("cannot read data record by rowid", dataQ, err)
+	}
+	return len(dataRows) > 0, nil
 }

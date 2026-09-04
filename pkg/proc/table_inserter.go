@@ -739,18 +739,44 @@ func (instr *TableInserter) insertDistinctIdxAndDataRecords(logger *l.CapiLogger
 			if !errors.Is(errInsertData, ErrDuplicateRowid) {
 				return curRowid, errInsertData
 			}
-			// Delete inserted idx record before trying another rowid
+			// Delete inserted idx record before trying another rowid.
+			// This delete-before-retry ordering is load-bearing: the idx insert already
+			// claimed keyValue, so without removing it the next attempt's idx insert would
+			// fail ErrDuplicateKey and we would treat the key as "already done" and silently
+			// lose this data row.
 			errDelete := deleteIdxRecordByKey(pCtx, idxName, []string{keyValue})
 			if errDelete != nil {
 				return curRowid, errDelete
 			}
 			logger.InfoCtx(pCtx, "cannot insert duplicate rowid on %d attempt: key %s, rowid %d", retryCount, keyValue, curRowid)
+			// Draw a fresh rowid before retrying. Reusing curRowid would deterministically hit
+			// the same data-row duplicate again (the colliding data row is still there), burning
+			// every retry until we give up and lose the record.
+			rowidRand.Seed(newSeed(instr.MachineHash))
+			curRowid = rowidRand.Int63()
 		} else if errors.Is(errInsertIdx, ErrDuplicateKey) {
-			// ErrDuplicateKey is ok, this means we already have a distinct record, nothing to do here
-			logger.DebugCtx(pCtx, "already have a distinct record, nothing to do here: key %s, rowid %d", keyValue, curRowid)
-			return curRowid, nil
+			// A distinct idx record with this key already exists. Normally that means the record was
+			// fully written (idx + data) and there is nothing to do. But it could also be an ORPHAN
+			// idx record left by a crash between the idx insert and the data insert on a previous
+			// attempt - in that case returning success here would permanently lose the data row.
+			// Verify the idx record points to a live data row; if not, delete the orphan and retry.
+			dataRowExists, errCheck := selectDataRowidByIdxKey(pCtx, idxName, instr.TableCreator.Name, keyValue)
+			if errCheck != nil {
+				return curRowid, errCheck
+			}
+			if dataRowExists {
+				logger.DebugCtx(pCtx, "already have a distinct record, nothing to do here: key %s, rowid %d", keyValue, curRowid)
+				return curRowid, nil
+			}
+			// Orphan idx record: the data row it points to is missing. Delete the stale idx record and retry.
+			logger.WarnCtx(pCtx, "found orphan distinct idx record for key %s (idx present, data row missing), deleting it and retrying", keyValue)
+			if errDelete := deleteIdxRecordByKey(pCtx, idxName, []string{keyValue}); errDelete != nil {
+				return curRowid, errDelete
+			}
+			continue
 		} else if retryCount < instr.MaxDuplicateRetries-1 {
 			rowidRand.Seed(newSeed(instr.MachineHash))
+			curRowid = rowidRand.Int63()
 		} else {
 			// Some serious error
 			return curRowid, errInsertIdx

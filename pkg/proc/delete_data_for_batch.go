@@ -151,14 +151,11 @@ func DeleteDataAndUniqueIndexesByBatchIdx(logger *l.CapiLogger, pCtx *ctx.Messag
 			// Trim unused empty rowid slots
 			rowIdsToDelete = rowIdsToDelete[:rowIdsToDeleteCount]
 
-			// Delete data records by rowid
-			logger.DebugCtx(pCtx, "deleting %d data records from %s: %v", len(rowIdsToDelete), pCtx.Msg.FullBatchId(), rowIdsToDelete)
-			if err := deleteDataRecordByRowid(pCtx, rowIdsToDelete); err != nil {
-				return err
-			}
-
-			// Delete index records by key
-			logger.InfoCtx(pCtx, "deleted %d records from data table for %s, now will delete from %d indexes", len(rowIdsToDelete), pCtx.Msg.FullBatchId(), len(uniqueKeysToDeleteMap))
+			// Ordering matters for crash recovery: delete INDEX records by key FIRST, then DATA records by rowid.
+			// If we crash between the two, we are left with orphan DATA rows (which the full data-table scan above
+			// will find and clean up on the next rerun) rather than orphan INDEX rows (which point to data rows that
+			// no longer exist and cannot be discovered by scanning the data table, permanently breaking uniqueness).
+			logger.InfoCtx(pCtx, "deleting index records for %s from %d indexes before deleting %d data records", pCtx.Msg.FullBatchId(), len(uniqueKeysToDeleteMap), len(rowIdsToDelete))
 			for idxName, idxKeysToDelete := range uniqueKeysToDeleteMap {
 				// Trim unused empty key slots
 				trimmedIdxKeysToDelete := idxKeysToDelete[:rowIdsToDeleteCount]
@@ -166,6 +163,12 @@ func DeleteDataAndUniqueIndexesByBatchIdx(logger *l.CapiLogger, pCtx *ctx.Messag
 				if err := deleteIdxRecordByKey(pCtx, idxName, trimmedIdxKeysToDelete); err != nil {
 					return err
 				}
+			}
+
+			// Delete data records by rowid
+			logger.DebugCtx(pCtx, "deleting %d data records from %s: %v", len(rowIdsToDelete), pCtx.Msg.FullBatchId(), rowIdsToDelete)
+			if err := deleteDataRecordByRowid(pCtx, rowIdsToDelete); err != nil {
+				return err
 			}
 
 			// TODO: assuming Delete won't interfere with paging used above;

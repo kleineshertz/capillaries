@@ -13,7 +13,18 @@ type ScriptInitResult struct {
 	Err         error
 }
 
-func NewScriptFromFiles(caPath string, privateKeys map[string]string, scriptUrl string, scriptParamsUrl string, customProcessorDefFactoryInstance CustomProcessorDefFactory, customProcessorsSettings map[string]json.RawMessage) (*ScriptDef, ScriptInitProblemType, error) {
+func NewScriptFromFiles(fetchPolicy *xfer.FetchPolicy, caPath string, privateKeys map[string]string, scriptUrl string, scriptParamsUrl string, customProcessorDefFactoryInstance CustomProcessorDefFactory, customProcessorsSettings map[string]json.RawMessage) (*ScriptDef, ScriptInitProblemType, error) {
+
+	// Gate externally supplied script/params URLs before fetching anything (SSRF / local-file disclosure hardening).
+	// A nil or unconfigured policy allows everything (legacy behavior).
+	if err := fetchPolicy.CheckUrl(scriptUrl); err != nil {
+		return nil, ScriptInitConnectivityProblem, fmt.Errorf("cannot read script %s: %s", scriptUrl, err.Error())
+	}
+	if scriptParamsUrl != "" {
+		if err := fetchPolicy.CheckUrl(scriptParamsUrl); err != nil {
+			return nil, ScriptInitConnectivityProblem, fmt.Errorf("cannot read script parameters %s: %s", scriptParamsUrl, err.Error())
+		}
+	}
 
 	scriptCacheKey := fmt.Sprintf("%s %s", scriptUrl, scriptParamsUrl)
 	if ScriptDefCache != nil {
