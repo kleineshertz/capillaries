@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/capillariesio/capillaries/pkg/ctx"
 	"github.com/capillariesio/capillaries/pkg/custom/pycalc"
 	"github.com/capillariesio/capillaries/pkg/custom/taganddenormalize"
 	"github.com/capillariesio/capillaries/pkg/db"
@@ -64,7 +65,7 @@ func noooooTestRun(t *testing.T) {
 		if msg == nil {
 			break
 		}
-		ackCmd := ProcessDataBatchMsg(&envConfig, logger, msg, 0, nil)
+		ackCmd := ProcessDataBatchMsg(ctx.TestProduction, &envConfig, logger, msg, 0, nil)
 		if ackCmd == mq.AcknowledgerCmdAck {
 			mqProducer.RemoveHead()
 		} else {

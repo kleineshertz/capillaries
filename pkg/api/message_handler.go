@@ -402,16 +402,16 @@ func checkDependencyNogoOrWait(logger *l.CapiLogger, pCtx *ctx.MessageProcessing
 
 // Used by Daemon and Toolbelt
 // ProcessDataBatchMsg handles one batch message. The step ordering below is load-bearing:
-//   1. run-status check BEFORE loading the script - a stopped run must not be retried forever
-//      just because the script URL is temporarily unreachable.
-//   2. checkLastBatchStatus (dedup) BEFORE any processing - a redelivered message for an already
-//      completed batch must be acked without re-running it, or it duplicates data.
-//   3. SetBatchStatus(success) AFTER the work completes - moving it earlier makes a batch look done
-//      though nothing ran (silent data loss). The crash window after the work but before this
-//      SetBatchStatus is exactly what the rerun-cleanup delete (DeleteDataAndUniqueIndexesByBatchIdx)
-//      exists to clean up; the window between SetBatchStatus(success) and refreshNodeAndRunStatus
-//      self-heals because node/run status is re-derived by folding batch history.
-func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wfmodel.Message, heartbeatInterval int64, heartbeatCallback ctx.HeartbeatCallbackFunc) mq.AcknowledgerCmd {
+//  1. run-status check BEFORE loading the script - a stopped run must not be retried forever
+//     just because the script URL is temporarily unreachable.
+//  2. checkLastBatchStatus (dedup) BEFORE any processing - a redelivered message for an already
+//     completed batch must be acked without re-running it, or it duplicates data.
+//  3. SetBatchStatus(success) AFTER the work completes - moving it earlier makes a batch look done
+//     though nothing ran (silent data loss). The crash window after the work but before this
+//     SetBatchStatus is exactly what the rerun-cleanup delete (DeleteDataAndUniqueIndexesByBatchIdx)
+//     exists to clean up; the window between SetBatchStatus(success) and refreshNodeAndRunStatus
+//     self-heals because node/run status is re-derived by folding batch history.
+func ProcessDataBatchMsg(testScenario ctx.TestScenarioType, envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wfmodel.Message, heartbeatInterval int64, heartbeatCallback ctx.HeartbeatCallbackFunc) mq.AcknowledgerCmd {
 	logger.PushF("api.ProcessDataBatchMsg")
 	defer logger.PopF()
 
@@ -425,7 +425,8 @@ func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wf
 		ZapMsgAgeMillis:         zap.Int64("age", time.Now().UnixMilli()-msg.Ts),
 		LastHeartbeatSentTs:     0, // And this is true
 		HeartbeatIntervalMillis: heartbeatInterval,
-		HeartbeatCallback:       heartbeatCallback}
+		HeartbeatCallback:       heartbeatCallback,
+		TestScenario:            testScenario}
 
 	// Check run status first. If it's stopped, don't even bother getting the script etc. If we try to get the script first,
 	// and it's not available, we may end up handling this batch forever even after the run is stopped by the operator
@@ -557,14 +558,10 @@ func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wf
 
 	batchStatus, batchStats, batchErr := proc.CallAppropriateProcessorForBatch(envConfig, logger, pCtx, readerNodeRunId, lookupNodeRunId)
 
-	// TODO: test only!!!
-	// if pCtx.BatchInfo.TargetNodeName == "order_item_date_inner" && pCtx.BatchInfo.BatchIdx == 3 {
-	// 	rnd := rand.New(rand.NewSource(time.Now().UnixMilli()))
-	// 	if rnd.Float32() < .5 {
-	// 		logger.InfoCtx(pCtx, "safeProcessBatch: test error")
-	// 		return mq.AcknowledgerCmdRetry
-	// 	}
-	// }
+	if pCtx.TestScenario == ctx.TestProcessDataBatchError {
+		logger.InfoCtx(pCtx, "test error: ProcessDataBatchMsg")
+		return mq.AcknowledgerCmdRetry
+	}
 
 	if batchErr != nil {
 		logger.ErrorCtx(pCtx, "safeProcessBatch: %s", batchErr.Error())

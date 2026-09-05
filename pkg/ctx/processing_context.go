@@ -13,6 +13,26 @@ import (
 
 type HeartbeatCallbackFunc func(string)
 
+type TestScenarioType int
+
+const (
+	TestProduction TestScenarioType = iota
+	// Data table: not exist, timeout, serious, not applied
+	TestDataDoesNotExist
+	TestDataOperationTimedOut
+	TestDataSerious
+	TestDataNotApplied
+	// Idx table: not exist, timeout, serious, not applied
+	TestIdxDoesNotExist
+	TestIdxOperationTimedOut
+	TestIdxSerious
+	TestIdxNotAppliedSamePresentFirstRun
+	TestIdxNotAppliedSamePresentSecondRun
+	TestIdxNotAppliedDiffPresent
+	// Generic process batch error
+	TestProcessDataBatchError
+)
+
 type MessageProcessingContext struct {
 	Msg                     wfmodel.Message
 	CqlSession              gocqlshims.Session
@@ -28,6 +48,7 @@ type MessageProcessingContext struct {
 	LastHeartbeatSentTs     int64
 	HeartbeatIntervalMillis int64
 	HeartbeatCallback       HeartbeatCallbackFunc
+	TestScenario            TestScenarioType
 }
 
 func (pCtx *MessageProcessingContext) DbConnect(envConfig *env.EnvConfig) error {

@@ -95,7 +95,7 @@ func selectBatchFromDataTablePaged(logger *l.CapiLogger,
 			break
 		}
 
-		isTimedOut := strings.Contains(err.Error(), "Operation timed out")
+		isTimedOut := strings.Contains(err.Error(), ErrorOperationTimedOut)
 		isInconsistentAndStillRetrying := strings.Contains(err.Error(), "Cannot achieve consistency level") && selectRetryIdx < 3
 		if !isTimedOut && !isInconsistentAndStillRetrying {
 			// The error was not a timeout, and not "inconsistent" while retrying, so it's either some unknown error or the number of retries is too high
@@ -318,7 +318,7 @@ func selectBatchFromTableByToken(logger *l.CapiLogger,
 		if err == nil {
 			break
 		}
-		if !strings.Contains(err.Error(), "Operation timed out") {
+		if !strings.Contains(err.Error(), ErrorOperationTimedOut) {
 			return 0, nil, db.WrapDbErrorWithQuery("cannot close iterator", q, err)
 		}
 		if retryCount >= maxRetries-1 {

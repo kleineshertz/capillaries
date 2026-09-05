@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/capillariesio/capillaries/pkg/api"
+	"github.com/capillariesio/capillaries/pkg/ctx"
 	"github.com/capillariesio/capillaries/pkg/custom/pycalc"
 	"github.com/capillariesio/capillaries/pkg/custom/taganddenormalize"
 	"github.com/capillariesio/capillaries/pkg/env"
@@ -169,7 +170,7 @@ func main() {
 						MsgHeartbeatCounter.Inc()
 					}
 				}
-				acknowledgerCmd := api.ProcessDataBatchMsg(envConfig, innerLogger, wfmodelMsg, heartbeatInterval, heartbeatCallback)
+				acknowledgerCmd := api.ProcessDataBatchMsg(ctx.TestProduction, envConfig, innerLogger, wfmodelMsg, heartbeatInterval, heartbeatCallback)
 				asyncConsumer.DecrementActiveProcessors()
 				acknowledgerChannel <- mq.AknowledgerToken{MsgId: wfmodelMsg.Id, Cmd: acknowledgerCmd}
 

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/capillariesio/capillaries/pkg/api"
+	"github.com/capillariesio/capillaries/pkg/ctx"
 	"github.com/capillariesio/capillaries/pkg/custom/pycalc"
 	"github.com/capillariesio/capillaries/pkg/custom/taganddenormalize"
 	"github.com/capillariesio/capillaries/pkg/db"
@@ -737,7 +738,7 @@ func runNode(envConfig *env.EnvConfig, logger *l.CapiLogger, nodeName string, ru
 			BatchIdx:        int16(i),
 			BatchesTotal:    int16(len(intervals))}
 
-		if acknowledgerCmd := api.ProcessDataBatchMsg(envConfig, logger, &msg, 0, nil); acknowledgerCmd != mq.AcknowledgerCmdAck {
+		if acknowledgerCmd := api.ProcessDataBatchMsg(ctx.TestProduction, envConfig, logger, &msg, 0, nil); acknowledgerCmd != mq.AcknowledgerCmdAck {
 			return 0, fmt.Errorf("processor returned acknowledgerCmd %d, assuming failure, check the logs", acknowledgerCmd)
 		}
 		logger.Info("BatchComplete: [%d,%d], %.3fs", intervals[i][0], intervals[i][1], time.Since(now).Seconds())
