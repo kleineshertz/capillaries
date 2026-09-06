@@ -411,7 +411,7 @@ func checkDependencyNogoOrWait(logger *l.CapiLogger, pCtx *ctx.MessageProcessing
 //     SetBatchStatus is exactly what the rerun-cleanup delete (DeleteDataAndUniqueIndexesByBatchIdx)
 //     exists to clean up; the window between SetBatchStatus(success) and refreshNodeAndRunStatus
 //     self-heals because node/run status is re-derived by folding batch history.
-func ProcessDataBatchMsg(testScenario ctx.TestScenarioType, envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wfmodel.Message, heartbeatInterval int64, heartbeatCallback ctx.HeartbeatCallbackFunc) mq.AcknowledgerCmd {
+func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wfmodel.Message, heartbeatInterval int64, heartbeatCallback ctx.HeartbeatCallbackFunc, tableInserterProps ctx.TableInserterProperties) mq.AcknowledgerCmd {
 	logger.PushF("api.ProcessDataBatchMsg")
 	defer logger.PopF()
 
@@ -426,7 +426,9 @@ func ProcessDataBatchMsg(testScenario ctx.TestScenarioType, envConfig *env.EnvCo
 		LastHeartbeatSentTs:     0, // And this is true
 		HeartbeatIntervalMillis: heartbeatInterval,
 		HeartbeatCallback:       heartbeatCallback,
-		TestScenario:            testScenario}
+		TableInserterProps:      tableInserterProps,
+		//TestScenario:            testScenario,
+	}
 
 	// Check run status first. If it's stopped, don't even bother getting the script etc. If we try to get the script first,
 	// and it's not available, we may end up handling this batch forever even after the run is stopped by the operator
@@ -558,10 +560,10 @@ func ProcessDataBatchMsg(testScenario ctx.TestScenarioType, envConfig *env.EnvCo
 
 	batchStatus, batchStats, batchErr := proc.CallAppropriateProcessorForBatch(envConfig, logger, pCtx, readerNodeRunId, lookupNodeRunId)
 
-	if pCtx.TestScenario == ctx.TestProcessDataBatchError {
-		logger.InfoCtx(pCtx, "test error: ProcessDataBatchMsg")
-		return mq.AcknowledgerCmdRetry
-	}
+	// if pCtx.TestScenario == ctx.TestProcessDataBatchError {
+	// 	logger.InfoCtx(pCtx, "test error: ProcessDataBatchMsg")
+	// 	return mq.AcknowledgerCmdRetry
+	// }
 
 	if batchErr != nil {
 		logger.ErrorCtx(pCtx, "safeProcessBatch: %s", batchErr.Error())

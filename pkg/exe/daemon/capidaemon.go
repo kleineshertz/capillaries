@@ -170,7 +170,7 @@ func main() {
 						MsgHeartbeatCounter.Inc()
 					}
 				}
-				acknowledgerCmd := api.ProcessDataBatchMsg(ctx.TestProduction, envConfig, innerLogger, wfmodelMsg, heartbeatInterval, heartbeatCallback)
+				acknowledgerCmd := api.ProcessDataBatchMsg(envConfig, innerLogger, wfmodelMsg, heartbeatInterval, heartbeatCallback, ctx.CreateProductionTableInserterProperties())
 				asyncConsumer.DecrementActiveProcessors()
 				acknowledgerChannel <- mq.AknowledgerToken{MsgId: wfmodelMsg.Id, Cmd: acknowledgerCmd}
 

@@ -8,13 +8,14 @@ To run all unit tests:
 ./test_unit.sh
 ```
 
-Code coverage:
+To run API tests against gocqlmem (takes a while):
 
 ```
-./test_coverage.sh
+./test_api.sh
 ```
 
-and open /var/tmp/capillaries.html in a web browser.
+Code covergae report will be generated, watch the messages.
+
 
 ## Integration tests
 

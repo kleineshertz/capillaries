@@ -34,6 +34,19 @@ func SumOfExpBackoffDelaysMs(startDelayMs int64, expBackoffFactorMultiplier int6
 	return s
 }
 
+type PreparedQuery struct {
+	Qb    *QueryBuilder
+	Query string
+}
+
+// These errors mimic Cassandra errors, so do not change these strings
+const (
+	ErrorDoesNotExist                 string = "does not exist"
+	ErrorOperationTimedOut            string = "Operation timed out"
+	ErrorAmazonKeyspacesZeroResponses string = "Operation failed - received 0 responses and 1 failures" // Saw this from Amazon Keyspaces, slow down
+	ErrorSomeSeriousError             string = "some serious Cassandra error"
+)
+
 /*
 Data/idx table name for each run needs run id as a suffix
 */
