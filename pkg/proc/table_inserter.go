@@ -252,7 +252,7 @@ func (instr *TableInserter) startDrainer() {
 					}
 				}
 			case <-timeoutChannel:
-				err = fmt.Errorf("got a timeout while draining, records sent %d, processed %d", instr.RecordsSent, instr.RecordsProcessed)
+				err = fmt.Errorf("got a timeout while draining, records sent %d, processed %d, timeout %d ms", instr.RecordsSent, instr.RecordsProcessed, instr.MaxAllowedRowInsertionTimeMs)
 				errorsFound = append(errorsFound, err.Error())
 			case err = <-instr.DrainerCancelSignal:
 				errorsFound = append(errorsFound, err.Error())

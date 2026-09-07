@@ -1,6 +1,7 @@
 package xfer
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -71,7 +72,7 @@ func (fp *FetchPolicy) CheckUrl(fileUrl string) error {
 
 func checkHostIsPublic(host string) error {
 	if host == "" {
-		return fmt.Errorf("fetch policy: url has an empty host")
+		return errors.New("fetch policy: url has an empty host")
 	}
 	ips, err := net.LookupIP(host)
 	if err != nil {

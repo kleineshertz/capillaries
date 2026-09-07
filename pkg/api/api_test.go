@@ -8,6 +8,8 @@ They test db-level Cassandra conditions, hence the somewhat comlex  TableInserte
 */
 import (
 	"encoding/csv"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -117,6 +119,16 @@ func (f *TestProcessorDefFactory) Create(processorType string) (sc.CustomProcess
 	}
 }
 
+func getTestProcessorSettings() map[string]json.RawMessage {
+	jsonData := []byte(`{"py_calc": {"python_interpreter_path": "python", "python_interpreter_params": ["-u", "-"]}, "tag_and_denormalize": {}}`)
+	var result map[string]json.RawMessage
+	err := json.Unmarshal(jsonData, &result)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
 // Table does not exist
 
 type TableInserterQueryPerformerTestDataAndIdxDoesNotExist struct {
@@ -129,40 +141,37 @@ type TableInserterQueryPerformerTestDataAndIdxDoesNotExist struct {
 func (qp *TableInserterQueryPerformerTestDataAndIdxDoesNotExist) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
 	qp.TotalDataHits++
 	if retryCount > 0 || qp.SimulatedDataErrorCount >= 1 {
-		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
-	} else {
-		qp.SimulatedDataErrorCount++
-		// log: will wait for table ... to be created, table retry count 0, got does not exist
-		// retry and succeed
-		return nil, false, fmt.Errorf("test scenario: data table " + cql.ErrorDoesNotExist)
+		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 	}
+
+	qp.SimulatedDataErrorCount++
+	// log: will wait for table ... to be created, table retry count 0, got does not exist
+	// retry and succeed
+	return nil, false, errors.New("test scenario: data table " + cql.ErrorDoesNotExist)
 }
 
 func (qp *TableInserterQueryPerformerTestDataAndIdxDoesNotExist) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// TEST ONLY
-		//instr.DoesNotExistPauseMillis = 100      // speed things up for testing
-		//instr.OperationTimedOutPauseMillis = 100 // speed things up for testing
-		// log: will wait for idx table ... to be created, table retry count 0, got does not exist
-		// retry and succeed
-		return nil, retryCount, false, fmt.Errorf("test scenario: idx table " + cql.ErrorDoesNotExist)
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: will wait for idx table ... to be created, table retry count 0, got does not exist
+	// retry and succeed
+	return nil, retryCount, false, errors.New("test scenario: idx table " + cql.ErrorDoesNotExist)
 }
 
-func TestTableDoesNotExist(t *testing.T) {
+func TestTableDoesNotExistLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_table_does_not_exist"
+	ks := "ks_table_does_not_exist_lookup"
 
 	envConfig := env.EnvConfig{
-		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
+		Cassandra:                         env.CassandraConfig{WriterWorkers: 2},
 		Log:                               env.LogConfig{Level: "INFO"},
 		CustomProcessorDefFactoryInstance: &TestProcessorDefFactory{},
 		UseGocqlmem:                       true,
@@ -172,7 +181,7 @@ func TestTableDoesNotExist(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestTableDoesNotExist")
+	logger.PushF("TestTableDoesNotExistLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -184,14 +193,13 @@ func TestTableDoesNotExist(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -208,25 +216,6 @@ func TestTableDoesNotExist(t *testing.T) {
 		} else {
 			mqProducer.MoveHeadToTail()
 		}
-		runHistory, err := GetRunHistory(gocqlmemSession, ks)
-		assert.Nil(t, err)
-
-		runStatus = runHistory[len(runHistory)-1].Status
-		logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
-
-		nodeHistory, err := GetNodeHistoryForRuns(gocqlmemSession, ks, []int16{int16(1)})
-		assert.Nil(t, err)
-
-		newNodeRunStatusMap := map[string]wfmodel.NodeBatchStatusType{}
-		for _, nodeEvent := range nodeHistory {
-			newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
-		}
-
-		newNodeRunStatus := fmt.Sprintf("%v", newNodeRunStatusMap)
-		if nodeRunStatus != newNodeRunStatus {
-			nodeRunStatus = newNodeRunStatus
-			logger.Info("TestRun.NODESTATUS: %s", nodeRunStatus)
-		}
 
 		// Make sure that fake errors were actually introduced
 		if queryPerformer.TotalDataHits > 0 {
@@ -245,6 +234,11 @@ func TestTableDoesNotExist(t *testing.T) {
 			}
 		}
 	}
+
+	// Verify run status
+	runHistory, err = GetRunHistory(gocqlmemSession, ks)
+	assert.Nil(t, err)
+	runStatus = runHistory[len(runHistory)-1].Status
 	assert.Equal(t, wfmodel.RunComplete, runStatus)
 
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
@@ -256,7 +250,7 @@ func TestTableDoesNotExist(t *testing.T) {
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 	assert.Nil(t, err)
 
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -272,37 +266,37 @@ type TableInserterQueryPerformerTestOperationTimedOut struct {
 func (qp *TableInserterQueryPerformerTestOperationTimedOut) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
 	qp.TotalDataHits++
 	if retryCount > 0 || qp.SimulatedDataErrorCount >= 1 {
-		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
-	} else {
-		qp.SimulatedDataErrorCount++
-		// log: cluster overloaded (Operation timed out), will wait for ...ms before writing to data table ... again, table retry count 0
-		// retry and succeed
-		return nil, false, fmt.Errorf("test scenario: data table " + cql.ErrorOperationTimedOut)
+		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 	}
+
+	qp.SimulatedDataErrorCount++
+	// log: cluster overloaded (Operation timed out), will wait for ...ms before writing to data table ... again, table retry count 0
+	// retry and succeed
+	return nil, false, errors.New("test scenario: data table " + cql.ErrorOperationTimedOut)
 }
 
 func (qp *TableInserterQueryPerformerTestOperationTimedOut) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// log: cluster overloaded (Operation timed out), will wait for ...ms before writing to data table ... again, table retry count 0
-		// retry and succeed
-		return nil, retryCount, false, fmt.Errorf("test scenario: idx table " + cql.ErrorOperationTimedOut)
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: cluster overloaded (Operation timed out), will wait for ...ms before writing to data table ... again, table retry count 0
+	// retry and succeed
+	return nil, retryCount, false, errors.New("test scenario: idx table " + cql.ErrorOperationTimedOut)
 }
 
-func TestOperationTimedOut(t *testing.T) {
+func TestOperationTimedOutLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_operation_timed_out"
+	ks := "ks_operation_timed_out_lookup"
 
 	envConfig := env.EnvConfig{
-		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
+		Cassandra:                         env.CassandraConfig{WriterWorkers: 2},
 		Log:                               env.LogConfig{Level: "INFO"},
 		CustomProcessorDefFactoryInstance: &TestProcessorDefFactory{},
 		UseGocqlmem:                       true,
@@ -312,7 +306,7 @@ func TestOperationTimedOut(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestOperationTimedOut")
+	logger.PushF("TestOperationTimedOutLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -324,14 +318,13 @@ func TestOperationTimedOut(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -348,25 +341,6 @@ func TestOperationTimedOut(t *testing.T) {
 		} else {
 			mqProducer.MoveHeadToTail()
 		}
-		runHistory, err := GetRunHistory(gocqlmemSession, ks)
-		assert.Nil(t, err)
-
-		runStatus = runHistory[len(runHistory)-1].Status
-		logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
-
-		nodeHistory, err := GetNodeHistoryForRuns(gocqlmemSession, ks, []int16{int16(1)})
-		assert.Nil(t, err)
-
-		newNodeRunStatusMap := map[string]wfmodel.NodeBatchStatusType{}
-		for _, nodeEvent := range nodeHistory {
-			newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
-		}
-
-		newNodeRunStatus := fmt.Sprintf("%v", newNodeRunStatusMap)
-		if nodeRunStatus != newNodeRunStatus {
-			nodeRunStatus = newNodeRunStatus
-			logger.Info("TestRun.NODESTATUS: %s", nodeRunStatus)
-		}
 
 		// Make sure that fake errors were actually introduced
 		if queryPerformer.TotalDataHits > 0 {
@@ -385,6 +359,11 @@ func TestOperationTimedOut(t *testing.T) {
 			}
 		}
 	}
+
+	// Verify run status
+	runHistory, err = GetRunHistory(gocqlmemSession, ks)
+	assert.Nil(t, err)
+	runStatus = runHistory[len(runHistory)-1].Status
 	assert.Equal(t, wfmodel.RunComplete, runStatus)
 
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
@@ -396,7 +375,7 @@ func TestOperationTimedOut(t *testing.T) {
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 	assert.Nil(t, err)
 
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -410,26 +389,26 @@ type TableInserterQueryPerformerTestDataSeriousError struct {
 func (qp *TableInserterQueryPerformerTestDataSeriousError) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
 	qp.TotalDataHits++
 	if retryCount > 0 || qp.SimulatedDataErrorCount >= 1 {
-		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
-	} else {
-		qp.SimulatedDataErrorCount++
-		// UI: some serious error; cannot write to data table
-		// give up immediately and report failure
-		return nil, false, fmt.Errorf("test scenario: data table " + cql.ErrorSomeSeriousError)
+		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 	}
+
+	qp.SimulatedDataErrorCount++
+	// log: some serious error; cannot write to data table
+	// give up immediately and report failure
+	return nil, false, errors.New("test scenario: data table " + cql.ErrorSomeSeriousError)
 }
 
 func (qp *TableInserterQueryPerformerTestDataSeriousError) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
 }
 
-func TestDataSeriousError(t *testing.T) {
+func TestDataSeriousErrorLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_data_serious_error"
+	ks := "ks_data_serious_error_lookup"
 
 	envConfig := env.EnvConfig{
 		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
@@ -442,7 +421,7 @@ func TestDataSeriousError(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestDataSeriousError")
+	logger.PushF("TestDataSeriousErrorLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -454,14 +433,13 @@ func TestDataSeriousError(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	//var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -493,7 +471,6 @@ func TestDataSeriousError(t *testing.T) {
 	for _, nodeEvent := range nodeHistory {
 		newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
 	}
-	logger.Info("TestRun.NODESTATUS final: %s", fmt.Sprintf("%v", newNodeRunStatusMap))
 
 	// For each node, verify batch statuses
 	for nodeName, nodeStatus := range newNodeRunStatusMap {
@@ -515,7 +492,7 @@ func TestDataSeriousError(t *testing.T) {
 			}
 		}
 	}
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -526,29 +503,29 @@ type TableInserterQueryPerformerTestIdxSeriousError struct {
 	SimulatedIdxErrorCount int
 }
 
-func (qp *TableInserterQueryPerformerTestIdxSeriousError) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
-	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
+func (qp *TableInserterQueryPerformerTestIdxSeriousError) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, _ int) (map[string]any, bool, error) {
+	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 }
 
 func (qp *TableInserterQueryPerformerTestIdxSeriousError) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// UI: some serious error; cannot write to idx table
-		// give up immediately and report failure
-		return nil, retryCount, false, fmt.Errorf("test scenario: idx table " + cql.ErrorSomeSeriousError)
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: some serious error; cannot write to idx table
+	// give up immediately and report failure
+	return nil, retryCount, false, errors.New("test scenario: idx table " + cql.ErrorSomeSeriousError)
 }
 
-func TestIdxSeriousError(t *testing.T) {
+func TestIdxSeriousErrorLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_idx_serious_error"
+	ks := "ks_idx_serious_error_lookup"
 
 	envConfig := env.EnvConfig{
 		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
@@ -561,7 +538,7 @@ func TestIdxSeriousError(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestIdxSeriousError")
+	logger.PushF("TestIdxSeriousErrorLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -573,14 +550,13 @@ func TestIdxSeriousError(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	//var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -612,7 +588,6 @@ func TestIdxSeriousError(t *testing.T) {
 	for _, nodeEvent := range nodeHistory {
 		newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
 	}
-	logger.Info("TestRun.NODESTATUS final: %s", fmt.Sprintf("%v", newNodeRunStatusMap))
 
 	// For each node, verify batch statuses
 	for nodeName, nodeStatus := range newNodeRunStatusMap {
@@ -634,7 +609,7 @@ func TestIdxSeriousError(t *testing.T) {
 			}
 		}
 	}
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -648,31 +623,31 @@ type TableInserterQueryPerformerTestDataNotApplied struct {
 func (qp *TableInserterQueryPerformerTestDataNotApplied) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
 	qp.TotalDataHits++
 	if retryCount > 0 || qp.SimulatedDataErrorCount >= 1 {
-		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
-	} else {
-		qp.SimulatedDataErrorCount++
-		// log warning: duplicate rowid not written [INSERT INTO ...], existing record [...], table retry count 0
-		// This will trigger non-fatal ErrDuplicateRowid error
-		// 	retry with new rowid and succeed
-		// 	isApplied = false
-		return nil, false, nil
+		return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 	}
+
+	qp.SimulatedDataErrorCount++
+	// log warning: duplicate rowid not written [INSERT INTO ...], existing record [...], table retry count 0
+	// This will trigger non-fatal ErrDuplicateRowid error
+	// 	retry with new rowid and succeed
+	// 	isApplied = false
+	return nil, false, nil
 }
 
 func (qp *TableInserterQueryPerformerTestDataNotApplied) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
 }
 
-func TestDataNotApplied(t *testing.T) {
+func TestDataNotAppliedLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_data_not_applied"
+	ks := "ks_data_not_applied_lookup"
 
 	envConfig := env.EnvConfig{
-		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
+		Cassandra:                         env.CassandraConfig{WriterWorkers: 2},
 		Log:                               env.LogConfig{Level: "INFO"},
 		CustomProcessorDefFactoryInstance: &TestProcessorDefFactory{},
 		UseGocqlmem:                       true,
@@ -682,7 +657,7 @@ func TestDataNotApplied(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestDataNotApplied")
+	logger.PushF("TestDataNotAppliedLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -694,14 +669,13 @@ func TestDataNotApplied(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -718,25 +692,6 @@ func TestDataNotApplied(t *testing.T) {
 		} else {
 			mqProducer.MoveHeadToTail()
 		}
-		runHistory, err := GetRunHistory(gocqlmemSession, ks)
-		assert.Nil(t, err)
-
-		runStatus = runHistory[len(runHistory)-1].Status
-		logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
-
-		nodeHistory, err := GetNodeHistoryForRuns(gocqlmemSession, ks, []int16{int16(1)})
-		assert.Nil(t, err)
-
-		newNodeRunStatusMap := map[string]wfmodel.NodeBatchStatusType{}
-		for _, nodeEvent := range nodeHistory {
-			newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
-		}
-
-		newNodeRunStatus := fmt.Sprintf("%v", newNodeRunStatusMap)
-		if nodeRunStatus != newNodeRunStatus {
-			nodeRunStatus = newNodeRunStatus
-			logger.Info("TestRun.NODESTATUS: %s", nodeRunStatus)
-		}
 
 		// Make sure that fake errors were actually introduced
 		if queryPerformer.TotalDataHits > 0 {
@@ -747,6 +702,11 @@ func TestDataNotApplied(t *testing.T) {
 			}
 		}
 	}
+
+	// Verify run status
+	runHistory, err = GetRunHistory(gocqlmemSession, ks)
+	assert.Nil(t, err)
+	runStatus = runHistory[len(runHistory)-1].Status
 	assert.Equal(t, wfmodel.RunComplete, runStatus)
 
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
@@ -758,7 +718,7 @@ func TestDataNotApplied(t *testing.T) {
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 	assert.Nil(t, err)
 
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -769,32 +729,32 @@ type TableInserterQueryPerformerTestIdxNotAppliedSamePresentFirstRetry struct {
 	SimulatedIdxErrorCount int
 }
 
-func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentFirstRetry) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
-	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
+func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentFirstRetry) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, _ int) (map[string]any, bool, error) {
+	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 }
 
 func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentFirstRetry) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// log: cannot write duplicate index key [%s] and proper rowid with %s,%d on retry 0, existing record [%v], assuming it was some other writer, throwing error %w
-		// give up immediately and report failure
-		existingIdxRow := map[string]any{}
-		existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
-		existingIdxRow["rowid"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["rowid"]]
-		return existingIdxRow, retryCount, false, nil
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: cannot write duplicate index key [%s] and proper rowid with %s,%d on retry 0, existing record [%v], assuming it was some other writer, throwing error %w
+	// give up immediately and report failure
+	existingIdxRow := map[string]any{}
+	existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
+	existingIdxRow["rowid"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["rowid"]]
+	return existingIdxRow, retryCount, false, nil
 }
 
-func TestIdxNotAppliedSamePresentFirstRetry(t *testing.T) {
+func TestIdxNotAppliedSamePresentFirstRetryLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_idx_not_applied_same_present_first_retry"
+	ks := "ks_idx_not_applied_same_present_first_retry_lookup"
 
 	envConfig := env.EnvConfig{
 		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
@@ -807,7 +767,7 @@ func TestIdxNotAppliedSamePresentFirstRetry(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestIdxSeriousError")
+	logger.PushF("TestIdxSeriousErrorLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -819,14 +779,13 @@ func TestIdxNotAppliedSamePresentFirstRetry(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	//var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -858,7 +817,6 @@ func TestIdxNotAppliedSamePresentFirstRetry(t *testing.T) {
 	for _, nodeEvent := range nodeHistory {
 		newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
 	}
-	logger.Info("TestRun.NODESTATUS final: %s", fmt.Sprintf("%v", newNodeRunStatusMap))
 
 	// For each node, verify batch statuses
 	for nodeName, nodeStatus := range newNodeRunStatusMap {
@@ -880,7 +838,7 @@ func TestIdxNotAppliedSamePresentFirstRetry(t *testing.T) {
 			}
 		}
 	}
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
 
@@ -891,39 +849,41 @@ type TableInserterQueryPerformerTestIdxNotAppliedSamePresentSecondRetry struct {
 	SimulatedIdxErrorCount int
 }
 
-func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentSecondRetry) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
-	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
+func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentSecondRetry) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, _ int) (map[string]any, bool, error) {
+	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 }
 
 func (qp *TableInserterQueryPerformerTestIdxNotAppliedSamePresentSecondRetry) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// log: duplicate idx record found (%s) in idx %s on retry %d when writing (%d,'%s'), assuming this retry was successful, proceeding as usual
-		// consider it a success
-		// Simulate first successful attempt:
-		db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-		// Simulate second attempt with isApplied=false:
-		existingIdxRow := map[string]any{}
-		existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
-		existingIdxRow["rowid"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["rowid"]]
-		// Return retry count 1, not 0. This will make inserter believe we are writing twice the same data, which is a happy (well, relatively) path
-		return existingIdxRow, 1, false, nil
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: duplicate idx record found (%s) in idx %s on retry %d when writing (%d,'%s'), assuming this retry was successful, proceeding as usual
+	// consider it a success
+	// Simulate first successful attempt:
+	if _, _, _, err := db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount); err != nil {
+		return nil, 0, false, fmt.Errorf("TableInserterQueryPerformerTestIdxNotAppliedSamePresentSecondRetry unexpectedly got %s", err.Error())
+	}
+	// Simulate second attempt with isApplied=false:
+	existingIdxRow := map[string]any{}
+	existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
+	existingIdxRow["rowid"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["rowid"]]
+	// Return retry count 1, not 0. This will make inserter believe we are writing twice the same data, which is a happy (well, relatively) path
+	return existingIdxRow, 1, false, nil
 }
 
-func TestIdxNotAppliedSamePresentSecondRetry(t *testing.T) {
+func TestIdxNotAppliedSamePresentSecondRetryLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_idx_not_applied_same_present_second_retry"
+	ks := "ks_idx_not_applied_same_present_second_retry_lookup"
 
 	envConfig := env.EnvConfig{
-		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
+		Cassandra:                         env.CassandraConfig{WriterWorkers: 2},
 		Log:                               env.LogConfig{Level: "INFO"},
 		CustomProcessorDefFactoryInstance: &TestProcessorDefFactory{},
 		UseGocqlmem:                       true,
@@ -933,7 +893,7 @@ func TestIdxNotAppliedSamePresentSecondRetry(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestIdxSeriousError")
+	logger.PushF("TestIdxSeriousErrorLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -945,14 +905,13 @@ func TestIdxNotAppliedSamePresentSecondRetry(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	//var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -986,16 +945,9 @@ func TestIdxNotAppliedSamePresentSecondRetry(t *testing.T) {
 	err = compareCsvs("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer_baseline.csv", "/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 	assert.Nil(t, err)
 
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }
-
-// 	} else if CurrentTestScenario == TestIdxNotAppliedDiffPresent {
-// 		// UI: cannot write duplicate index key ... with ... on retry 0, existing record [...], rowid is different
-// 		// give up immediately and report failure
-// 		isApplied = false
-// 		existingIdxRow["key"] = idxKey
-// 		existingIdxRow["rowid"] = curRowid + 1
 
 // TestIdxNotAppliedDiffPresent
 
@@ -1004,32 +956,32 @@ type TableInserterQueryPerformerTestIdxNotAppliedDiffPresent struct {
 	SimulatedIdxErrorCount int
 }
 
-func (qp *TableInserterQueryPerformerTestIdxNotAppliedDiffPresent) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, retryCount int) (map[string]any, bool, error) {
-	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams, retryCount)
+func (qp *TableInserterQueryPerformerTestIdxNotAppliedDiffPresent) PerformInsertDataRecordWithRowid(gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedDataQueryParams []any, _ int) (map[string]any, bool, error) {
+	return db.HelperPerformInsertDataRecordWithRowid(gocqlSession, pq, preparedDataQueryParams)
 }
 
 func (qp *TableInserterQueryPerformerTestIdxNotAppliedDiffPresent) PerformInsertIdxRecordWithRowid(idxUniqueness sc.IdxUniqueness, gocqlSession gocqlshims.Session, pq *cql.PreparedQuery, preparedIdxQueryParams []any, retryCount int) (map[string]any, int, bool, error) {
 	qp.TotalIdxHits++
 	if retryCount > 0 || qp.SimulatedIdxErrorCount >= 1 {
 		return db.HelperPerformInsertIdxRecordWithRowid(idxUniqueness, gocqlSession, pq, preparedIdxQueryParams, retryCount)
-	} else {
-		qp.SimulatedIdxErrorCount++
-		// log: cannot write duplicate index key [%s] with %s,%d on retry %d, existing record [%v], rowid is different, throwing error %w
-		// give up immediately and report failure
-		existingIdxRow := map[string]any{}
-		existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
-		existingIdxRow["rowid"] = -1 // Pray it's different than the passed one
-		return existingIdxRow, retryCount, false, nil
 	}
+
+	qp.SimulatedIdxErrorCount++
+	// log: cannot write duplicate index key [%s] with %s,%d on retry %d, existing record [%v], rowid is different, throwing error %w
+	// give up immediately and report failure
+	existingIdxRow := map[string]any{}
+	existingIdxRow["key"] = pq.Qb.PreparedColumnData.Values[pq.Qb.PreparedColumnData.ColumnIdxMap["key"]]
+	existingIdxRow["rowid"] = -1 // Pray it's different than the passed one
+	return existingIdxRow, retryCount, false, nil
 }
 
-func TestIdxNotAppliedDiffPresent(t *testing.T) {
+func TestIdxNotAppliedDiffPresentLookup(t *testing.T) {
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_date_value_grouped_left_outer.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_inner.csv")
 	os.Remove("/tmp/capi_out/lookup_quicktest/order_item_date_left_outer.csv")
 
-	ks := "ks_idx_not_applied_diff_present"
+	ks := "ks_idx_not_applied_diff_present_lookup"
 
 	envConfig := env.EnvConfig{
 		Cassandra:                         env.CassandraConfig{WriterWorkers: 1},
@@ -1042,7 +994,7 @@ func TestIdxNotAppliedDiffPresent(t *testing.T) {
 
 	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
 	assert.Nil(t, err)
-	logger.PushF("TestIdxSeriousError")
+	logger.PushF("TestIdxSeriousErrorLookup")
 	defer logger.PopF()
 
 	mqProducer := mq.TestInmemProducer{}
@@ -1054,14 +1006,13 @@ func TestIdxNotAppliedDiffPresent(t *testing.T) {
 	assert.Nil(t, err)
 
 	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
 	runHistory, err := GetRunHistory(gocqlmemSession, ks)
 	assert.Nil(t, err)
-
 	runStatus = runHistory[len(runHistory)-1].Status
-	logger.Info("TestRun.RUNSTATUS: %s", runStatus.ToString())
 	assert.Equal(t, wfmodel.RunStart, runStatus)
 
-	//var nodeRunStatus string
 	for {
 		msg := mqProducer.PeekHead()
 		if msg == nil {
@@ -1093,7 +1044,6 @@ func TestIdxNotAppliedDiffPresent(t *testing.T) {
 	for _, nodeEvent := range nodeHistory {
 		newNodeRunStatusMap[nodeEvent.ScriptNode] = nodeEvent.Status
 	}
-	logger.Info("TestRun.NODESTATUS final: %s", fmt.Sprintf("%v", newNodeRunStatusMap))
 
 	// For each node, verify batch statuses
 	for nodeName, nodeStatus := range newNodeRunStatusMap {
@@ -1115,6 +1065,97 @@ func TestIdxNotAppliedDiffPresent(t *testing.T) {
 			}
 		}
 	}
-	gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec()
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
+	gocqlmemSession.Close()
+}
+
+func TestTableDoesNotExistFannieMae(t *testing.T) {
+	os.Remove("/tmp/capi_out/fannie_mae_apitest/deal_seller_summaries.csv")
+	os.Remove("/tmp/capi_out/fannie_mae_apitest/deal_summaries.csv")
+	os.Remove("/tmp/capi_out/fannie_mae_apitest/loan_smrs_clcltd.csv")
+
+	ks := "ks_table_does_not_exist_fannie_mae"
+
+	envConfig := env.EnvConfig{
+		Cassandra:                         env.CassandraConfig{WriterWorkers: 4},
+		Log:                               env.LogConfig{Level: "INFO"},
+		CustomProcessorDefFactoryInstance: &TestProcessorDefFactory{},
+		CustomProcessorsSettings:          getTestProcessorSettings(),
+		UseGocqlmem:                       true,
+	}
+	sc.ScriptDefCache = sc.NewScriptDefCache()
+	NodeDependencyReadynessCache = NewNodeDependencyReadynessCache()
+
+	logger, err := l.NewLoggerFromEnvConfig(&envConfig, "unittest")
+	assert.Nil(t, err)
+	logger.PushF("TestTableDoesNotExistFannieMae")
+	defer logger.PopF()
+
+	mqProducer := mq.TestInmemProducer{}
+
+	gocqlmemSession, cassandraEngineType, err := db.NewSession(&envConfig, ks, db.CreateKeyspaceOnConnect)
+	assert.Nil(t, err)
+
+	_, err = StartRun(&envConfig, logger, &mqProducer, "/tmp/capi_cfg/fannie_mae_apitest/script_api.json", "/tmp/capi_cfg/fannie_mae_apitest/script_params_api.json", gocqlmemSession, cassandraEngineType, ks, []string{"01_read_payments"}, "test run")
+	assert.Nil(t, err)
+
+	var runStatus wfmodel.RunStatusType
+
+	// Verify run status
+	runHistory, err := GetRunHistory(gocqlmemSession, ks)
+	assert.Nil(t, err)
+	runStatus = runHistory[len(runHistory)-1].Status
+	assert.Equal(t, wfmodel.RunStart, runStatus)
+
+	for {
+		msg := mqProducer.PeekHead()
+		if msg == nil {
+			break
+		}
+		queryPerformer := TableInserterQueryPerformerTestDataAndIdxDoesNotExist{}
+		ackCmd := ProcessDataBatchMsg(&envConfig, logger, msg, 0, nil, ctx.TableInserterProperties{
+			QueryPerformer:               &queryPerformer,
+			DoesNotExistPauseMillis:      10,  // speed it up for testing
+			OperationTimedOutPauseMillis: 100, // speed it up for testing
+		})
+		if ackCmd == mq.AcknowledgerCmdAck {
+			mqProducer.RemoveHead()
+			logger.Info("batch processed %s", msg.FullBatchId())
+		} else {
+			mqProducer.MoveHeadToTail()
+		}
+
+		// Make sure that fake errors were actually introduced
+		if queryPerformer.TotalDataHits > 0 {
+			if strings.Contains(msg.TargetNodeName, "write_file_") {
+				assert.Equal(t, 0, queryPerformer.SimulatedDataErrorCount, msg.TargetNodeName)
+			} else {
+				assert.Equal(t, 1, queryPerformer.SimulatedDataErrorCount, msg.TargetNodeName)
+			}
+		}
+
+		if queryPerformer.TotalIdxHits > 0 {
+			if strings.HasPrefix(msg.TargetNodeName, "01_") || strings.HasPrefix(msg.TargetNodeName, "02_") || msg.TargetNodeName == "04_loan_smrs_clcltd" {
+				assert.Equal(t, 1, queryPerformer.SimulatedIdxErrorCount, msg.TargetNodeName)
+			} else {
+				assert.Equal(t, 0, queryPerformer.SimulatedIdxErrorCount, msg.TargetNodeName)
+			}
+		}
+	}
+
+	// Verify run status
+	runHistory, err = GetRunHistory(gocqlmemSession, ks)
+	assert.Nil(t, err)
+	runStatus = runHistory[len(runHistory)-1].Status
+	assert.Equal(t, wfmodel.RunComplete, runStatus)
+
+	err = compareCsvs("/tmp/capi_out/fannie_mae_apitest/deal_seller_summaries_baseline.csv", "/tmp/capi_out/fannie_mae_apitest/deal_seller_summaries.csv")
+	assert.Nil(t, err)
+	err = compareCsvs("/tmp/capi_out/fannie_mae_apitest/deal_summaries_baseline.csv", "/tmp/capi_out/fannie_mae_apitest/deal_summaries.csv")
+	assert.Nil(t, err)
+	err = compareCsvs("/tmp/capi_out/fannie_mae_apitest/loan_smrs_clcltd_baseline.csv", "/tmp/capi_out/fannie_mae_apitest/loan_smrs_clcltd.csv")
+	assert.Nil(t, err)
+
+	assert.Nil(t, gocqlmemSession.Query(fmt.Sprintf("DROP keyspace %s;", ks)).Exec())
 	gocqlmemSession.Close()
 }

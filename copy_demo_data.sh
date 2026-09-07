@@ -29,7 +29,6 @@ pushd test/code/portfolio
 ./1_create_data.sh quick fs
 popd
 
-# Not required yet, but may be useful for DISTINCT API testing
-# pushd test/code/fannie_mae
-# ./1_copy_data.sh quick fs
-# popd
+pushd test/code/fannie_mae
+./1_copy_data.sh api fs
+popd

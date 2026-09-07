@@ -427,7 +427,6 @@ func ProcessDataBatchMsg(envConfig *env.EnvConfig, logger *l.CapiLogger, msg *wf
 		HeartbeatIntervalMillis: heartbeatInterval,
 		HeartbeatCallback:       heartbeatCallback,
 		TableInserterProps:      tableInserterProps,
-		//TestScenario:            testScenario,
 	}
 
 	// Check run status first. If it's stopped, don't even bother getting the script etc. If we try to get the script first,

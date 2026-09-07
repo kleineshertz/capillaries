@@ -10,18 +10,20 @@ test(){
 	go test -cover ./... -run $test_name -args -test.gocoverdir="/var/tmp/capi_test/$test_name"  | grep "/api"
 }
 
-test TestTableDoesNotExist
-test TestOperationTimedOut
-test TestDataSeriousError
-test TestIdxSeriousError
-test TestDataNotApplied
-test TestIdxNotAppliedSamePresentFirstRetry
-test TestIdxNotAppliedSamePresentSecondRetry
-test TestIdxNotAppliedDiffPresent
+test TestTableDoesNotExistLookup
+test TestOperationTimedOutLookup
+test TestDataSeriousErrorLookup
+test TestIdxSeriousErrorLookup
+test TestDataNotAppliedLookup
+test TestIdxNotAppliedSamePresentFirstRetryLookup
+test TestIdxNotAppliedSamePresentSecondRetryLookup
+test TestIdxNotAppliedDiffPresentLookup
+
+test TestTableDoesNotExistFannieMae
 
 mkdir -p /var/tmp/capi_test/test_api_merged
 rm -fR /var/tmp/capi_test/test_api_merged/*
-go tool covdata merge -i=/var/tmp/capi_test/TestTableDoesNotExist,/var/tmp/capi_test/TestOperationTimedOut,/var/tmp/capi_test/TestIdxSeriousError,/var/tmp/capi_test/TestDataNotApplied,/var/tmp/capi_test/TestIdxNotAppliedSamePresentFirstRetry,/var/tmp/capi_test/TestIdxNotAppliedSamePresentSecondRetry,/var/tmp/capi_test/TestIdxNotAppliedDiffPresent -o=/var/tmp/capi_test/test_api_merged
+go tool covdata merge -i=/var/tmp/capi_test/TestTableDoesNotExistLookup,/var/tmp/capi_test/TestOperationTimedOutLookup,/var/tmp/capi_test/TestIdxSeriousErrorLookup,/var/tmp/capi_test/TestDataNotAppliedLookup,/var/tmp/capi_test/TestIdxNotAppliedSamePresentFirstRetryLookup,/var/tmp/capi_test/TestIdxNotAppliedSamePresentSecondRetryLookup,/var/tmp/capi_test/TestIdxNotAppliedDiffPresentLookup,/var/tmp/capi_test/TestTableDoesNotExistFannieMae -o=/var/tmp/capi_test/test_api_merged
 go tool covdata textfmt -i=/var/tmp/capi_test/test_api_merged -o=/var/tmp/capi_test/test_api.out
 go tool cover -html=/var/tmp/capi_test/test_api.out -o=/var/tmp/test_api.html
 
