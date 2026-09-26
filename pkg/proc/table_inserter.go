@@ -181,10 +181,7 @@ func createInserterAndStartWorkers(logger *l.CapiLogger, envConfig *env.EnvConfi
 	logger.DebugCtx(pCtx, "launching %d writers...", instr.NumWorkers)
 
 	for w := 0; w < instr.NumWorkers; w++ {
-		newLogger, err := l.NewLoggerFromLogger(logger)
-		if err != nil {
-			return nil, err
-		}
+		newLogger := l.NewLoggerFromLogger(logger)
 		// Increase busy worker count
 		instr.WorkerWaitGroup.Add(1)
 		go instr.tableInserterWorker(newLogger, pCtx)
