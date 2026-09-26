@@ -449,9 +449,9 @@ func sortAndSaveGroup(items []*GroupItem, fileBase string, formats string) {
 				return 1
 			default:
 				switch {
-				case l.OrderId > l.OrderId:
+				case l.OrderId > r.OrderId:
 					return -1
-				case l.OrderId < l.OrderId:
+				case l.OrderId < r.OrderId:
 					return 1
 				default:
 					return -0
